@@ -1,0 +1,258 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+  }
+}
+
+/* CRM Theme: matches UTC Travel website's signature ruby/burgundy & gold palette */
+.crm-theme {
+  --primary: 350 71% 32%;
+  --primary-foreground: 0 0% 100%;
+
+  /* Maps CRM blue utilities to UTC Travel website's #8b182b ruby palette */
+  --color-blue-50: #fdf2f4;
+  --color-blue-100: #fce7ea;
+  --color-blue-200: #f8d0d6;
+  --color-blue-300: #f1a9b4;
+  --color-blue-400: #e57183;
+  --color-blue-500: #b81f3a;
+  --color-blue-600: #8b182b;
+  --color-blue-700: #731323;
+  --color-blue-800: #5c0f1c;
+  --color-blue-900: #460b15;
+  --color-blue-950: #2b050c;
+
+  /* Maps CRM indigo utilities to UTC Travel website's ruby/wine scale */
+  --color-indigo-50: #fdf2f4;
+  --color-indigo-100: #fce7ea;
+  --color-indigo-200: #f8d0d6;
+  --color-indigo-300: #f1a9b4;
+  --color-indigo-400: #e57183;
+  --color-indigo-500: #b81f3a;
+  --color-indigo-600: #8b182b;
+  --color-indigo-700: #731323;
+  --color-indigo-800: #5c0f1c;
+  --color-indigo-900: #460b15;
+  --color-indigo-950: #2b050c;
+}
+
+body {
+  @apply bg-white text-slate-900;
+}
+
+/* CRM Mobile Responsiveness (Supports 320px, 375px, 430px, Tablet & Desktop) */
+.crm-theme {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+/* Global table & container horizontal scroll containment */
+.crm-theme table {
+  max-width: 100%;
+}
+
+.crm-theme .overflow-x-auto {
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Ensure containers holding tables allow horizontal scrolling on small screens */
+.crm-theme div:has(> table),
+.crm-theme div:has(> div > table) {
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Prevent image & svg blowout */
+.crm-theme img,
+.crm-theme svg {
+  max-width: 100%;
+}
+
+/* Ensure form elements don't exceed container */
+.crm-theme input,
+.crm-theme select,
+.crm-theme textarea {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Modal containment */
+.crm-theme .fixed.inset-0.z-50 {
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Mobile screen size adaptations (<= 640px) */
+@media (max-width: 640px) {
+  /* Compact outer paddings to maximize available screen real-estate */
+  .crm-theme .p-8 {
+    padding: 1rem !important;
+  }
+  .crm-theme .px-8 {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+  .crm-theme .py-8 {
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
+  }
+  .crm-theme .p-6 {
+    padding: 0.875rem !important;
+  }
+  .crm-theme .px-6 {
+    padding-left: 0.875rem !important;
+    padding-right: 0.875rem !important;
+  }
+  .crm-theme .gap-8 {
+    gap: 1rem !important;
+  }
+  .crm-theme .gap-6 {
+    gap: 0.875rem !important;
+  }
+  .crm-theme .space-y-8 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 1.25rem !important;
+  }
+  .crm-theme .space-y-6 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 1rem !important;
+  }
+
+  /* Modals: fit securely inside viewport with margins and vertical scroll */
+  .crm-theme .fixed.inset-0.z-50 > div:not(.fixed):not(.absolute) {
+    max-width: calc(100vw - 1.5rem) !important;
+    width: 100% !important;
+    max-height: calc(100dvh - 2rem) !important;
+    overflow-y: auto !important;
+    margin: auto !important;
+    padding: 1.25rem !important;
+  }
+
+  /* Lead Kanban columns: scale down to fit comfortably */
+  .crm-theme .w-80.flex-shrink-0 {
+    width: calc(100vw - 2.5rem) !important;
+    max-width: 20rem !important;
+  }
+}
+
+/* Extra small mobile screens (<= 390px, such as 320px and 375px) */
+@media (max-width: 390px) {
+  .crm-theme .p-8 {
+    padding: 0.75rem !important;
+  }
+  .crm-theme .p-6 {
+    padding: 0.75rem !important;
+  }
+  .crm-theme h1.text-3xl {
+    font-size: 1.5rem !important;
+    line-height: 2rem !important;
+  }
+  .crm-theme h2.text-2xl {
+    font-size: 1.25rem !important;
+    line-height: 1.75rem !important;
+  }
+  .crm-theme h3.text-3xl {
+    font-size: 1.5rem !important;
+    line-height: 2rem !important;
+  }
+  .crm-theme h3.text-2xl {
+    font-size: 1.25rem !important;
+    line-height: 1.75rem !important;
+  }
+}
+
+/* Touch device button visibility (replaces hover-only action reveals) */
+@media (hover: none) {
+  .crm-theme .group .group-hover\:opacity-100,
+  .crm-theme .opacity-0.group-hover\:opacity-100 {
+    opacity: 1 !important;
+  }
+}
+
+/* ============================================================ */
+/* UTC TRAVEL CRM BRAND PALETTE & DESIGN SYSTEM                 */
+/* Infused with the signature Ruby (#8b182b) & Gold (#f59e0b)  */
+/* ============================================================ */
+
+/* Primary brand button styling across all CRM modules */
+.crm-theme button.bg-blue-600,
+.crm-theme a.bg-blue-600,
+.crm-theme .bg-blue-600 {
+  background-color: #8b182b !important;
+  color: #ffffff !important;
+}
+.crm-theme button.bg-blue-600:hover,
+.crm-theme a.bg-blue-600:hover,
+.crm-theme .hover\:bg-blue-700:hover {
+  background-color: #731323 !important;
+}
+
+/* Primary text & link highlights */
+.crm-theme .text-blue-600,
+.crm-theme .hover\:text-blue-600:hover {
+  color: #8b182b !important;
+}
+.crm-theme .text-blue-700 {
+  color: #731323 !important;
+}
+.crm-theme .text-blue-800 {
+  color: #5c0f1c !important;
+}
+
+/* Light ruby badge backgrounds */
+.crm-theme .bg-blue-50 {
+  background-color: #fdf2f4 !important;
+}
+.crm-theme .bg-blue-100 {
+  background-color: #fce7ea !important;
+}
+.crm-theme .border-blue-100,
+.crm-theme .border-blue-200 {
+  border-color: #f8d0d6 !important;
+}
+
+/* Input focus rings in website ruby */
+.crm-theme input:focus,
+.crm-theme select:focus,
+.crm-theme textarea:focus {
+  border-color: #8b182b !important;
+  box-shadow: 0 0 0 3px rgba(139, 24, 43, 0.15) !important;
+  outline: none !important;
+}
+
+/* Modal styling matching website luxury look */
+.crm-theme .fixed.inset-0.z-50 > div:not(.fixed):not(.absolute) {
+  border-radius: 1rem !important;
+  border: 1px solid rgba(226, 232, 240, 0.9) !important;
+  box-shadow: 0 25px 50px -12px rgba(139, 24, 43, 0.12), 0 10px 25px -5px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Table header styling */
+.crm-theme thead th {
+  background-color: #f8f9fa !important;
+  color: #475569 !important;
+  font-weight: 700 !important;
+  font-size: 0.75rem !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+
+/* Table row hover */
+.crm-theme tbody tr:hover {
+  background-color: #fff9fa !important;
+}
+
+
+

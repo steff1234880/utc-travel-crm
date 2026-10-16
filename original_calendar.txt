@@ -1,0 +1,45 @@
+export default function GlobalTravelCalendar() {
+  const [bookingMode, setBookingMode] = useState<'GROUP' | 'CUSTOM'>('GROUP');
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDateStr, setSelectedDateStr] = useState<string | null>(null);
+  const [selectedGroupTour, setSelectedGroupTour] = useState<GroupTourCalendarItem | null>(null);
+  
+  // Custom Trip form state
+  const [travellerCount, setTravellerCount] = useState<number>(2);
+
+  // Modals
+  const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
+  const [isEnquiryModalOpen, setIsEnquiryModalOpen] = useState(false);
+  const [selectedPackageForEnquiry, setSelectedPackageForEnquiry] = useState<{ id?: string; title?: string }>({});
+
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth() + 1; // 1-indexed for API
+
+  // Fetch Global Unavailabilities (admin blocked dates)
+  const { data: availabilitiesData } = useQuery<{ data: GlobalAvailability[] }>({
+    queryKey: ['global-calendar', year, month],
+    queryFn: async () => {
+      const res = await api.get('/dashboard/calendar');
+      return res.data;
+    },
+  });
+
+  // Fetch Group Tours Calendar Data
+  const { data: groupToursData, refetch: refetchGroupTours } = useQuery<{ data: GroupTourCalendarItem[] }>({
+    queryKey: ['group-tours-calendar', year, month],
+    queryFn: async () => {
+      const data = await groupTourService.getCalendarGroupTours(month, year);
+      return { data };
+    },
+  });
+
+  // Fetch Standard Packages for selected date range fallback
+  const { data: tripsData, isLoading: isLoadingTrips } = useQuery<{ data: TravelPackage[] }>({
+    queryKey: ['available-trips', selectedDateStr],
+    queryFn: async () => {
+      if (!selectedDateStr) return { data: [] };
+      const res = await api.get(`/dashboard/calendar/trips?startDate=${selectedDateStr}`);
+      return res.data;
+    },
+    enabled: !!selectedDateStr && bookingMode === 'CUSTOM',
+  });

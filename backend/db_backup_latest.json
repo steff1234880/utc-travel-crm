@@ -1,0 +1,395 @@
+{
+  "timestamp": "2026-09-17T21:26:56.129Z",
+  "users": [
+    {
+      "id": "f45f54e8-71b1-4af3-93ec-f8b49c5dcf47",
+      "email": "johndoe@test.com",
+      "passwordHash": "temp_hash_change_later",
+      "isActive": true,
+      "createdAt": "2026-09-17T19:45:38.336Z",
+      "updatedAt": "2026-09-17T19:45:38.336Z",
+      "roleId": null
+    },
+    {
+      "id": "466583da-1d1f-4cb7-8370-77c0dbb7a48f",
+      "email": "admin@utctravel.com",
+      "passwordHash": "password",
+      "isActive": true,
+      "createdAt": "2026-09-17T20:14:00.620Z",
+      "updatedAt": "2026-09-17T20:14:00.620Z",
+      "roleId": "265f2020-3a99-42b9-ab60-1ddd4498dd7c"
+    },
+    {
+      "id": "33e9e667-16f9-46d5-86c9-8e96836d3e90",
+      "email": "new_emp@utctravel.com",
+      "passwordHash": "temp_hash_change_later",
+      "isActive": true,
+      "createdAt": "2026-09-17T20:23:04.446Z",
+      "updatedAt": "2026-09-17T20:23:04.500Z",
+      "roleId": "712a8ba6-3154-43cc-b96f-6e50d17e1f31"
+    },
+    {
+      "id": "c8499716-f5e8-41e8-9a59-89057883ce70",
+      "email": "apitester@utctravel.com",
+      "passwordHash": "temp_hash_change_later",
+      "isActive": true,
+      "createdAt": "2026-09-17T20:15:23.861Z",
+      "updatedAt": "2026-09-17T20:24:47.617Z",
+      "roleId": "d2eac097-09c3-4034-977d-da5250bfeead"
+    },
+    {
+      "id": "b8e76cf8-2c0d-4bce-b2ae-abcaad1403fe",
+      "email": "stefinsaji26@gmail.com",
+      "passwordHash": "temp_hash_change_later",
+      "isActive": true,
+      "createdAt": "2026-09-17T19:47:45.853Z",
+      "updatedAt": "2026-09-17T20:25:27.977Z",
+      "roleId": "712a8ba6-3154-43cc-b96f-6e50d17e1f31"
+    },
+    {
+      "id": "bef9f501-388e-4752-b48c-5c91ffeeb014",
+      "email": "test12345@utctravel.com",
+      "passwordHash": "temp_hash_change_later",
+      "isActive": true,
+      "createdAt": "2026-09-17T21:18:27.312Z",
+      "updatedAt": "2026-09-17T21:18:27.320Z",
+      "roleId": "54aa67f6-06f3-4871-b9b0-50a9318e5dec"
+    }
+  ],
+  "roles": [
+    {
+      "id": "265f2020-3a99-42b9-ab60-1ddd4498dd7c",
+      "name": "HR_MANAGER",
+      "description": "Human Resources Manager"
+    },
+    {
+      "id": "d2eac097-09c3-4034-977d-da5250bfeead",
+      "name": "Sales Executive",
+      "description": null
+    },
+    {
+      "id": "712a8ba6-3154-43cc-b96f-6e50d17e1f31",
+      "name": "Sales Manager",
+      "description": null
+    },
+    {
+      "id": "54aa67f6-06f3-4871-b9b0-50a9318e5dec",
+      "name": "ADMIN",
+      "description": null
+    }
+  ],
+  "departments": [
+    {
+      "id": "1c8fc1be-7a1a-4491-ade9-c9998ced631b",
+      "name": "General",
+      "description": null,
+      "createdAt": "2026-09-17T20:23:04.460Z",
+      "updatedAt": "2026-09-17T20:23:04.460Z"
+    },
+    {
+      "id": "021fdc37-db28-4eb3-9176-76a0d8cd1b2a",
+      "name": "Management",
+      "description": "Management Department",
+      "createdAt": "2026-09-17T20:28:42.008Z",
+      "updatedAt": "2026-09-17T20:28:42.008Z"
+    },
+    {
+      "id": "23ad2883-0945-4fea-ae05-a0dc9c8baf85",
+      "name": "HR",
+      "description": "HR Department",
+      "createdAt": "2026-09-17T20:28:42.012Z",
+      "updatedAt": "2026-09-17T20:28:42.012Z"
+    },
+    {
+      "id": "aee4e1bc-d788-4db8-a603-21c36be8edb7",
+      "name": "Sales",
+      "description": "Sales Department",
+      "createdAt": "2026-09-17T20:28:42.015Z",
+      "updatedAt": "2026-09-17T20:28:42.015Z"
+    },
+    {
+      "id": "9fff2a9a-d050-48b3-baa7-8ba36eeaf56e",
+      "name": "Operations",
+      "description": "Operations Department",
+      "createdAt": "2026-09-17T20:28:42.018Z",
+      "updatedAt": "2026-09-17T20:28:42.018Z"
+    },
+    {
+      "id": "2a17ba97-5468-4d1f-8bcf-49de96e465a6",
+      "name": "Accounting",
+      "description": "Accounting Department",
+      "createdAt": "2026-09-17T20:28:42.023Z",
+      "updatedAt": "2026-09-17T20:28:42.023Z"
+    },
+    {
+      "id": "e0be644f-7698-43f9-9182-9a4009481367",
+      "name": "Reservations",
+      "description": "Reservations Department",
+      "createdAt": "2026-09-17T20:28:42.026Z",
+      "updatedAt": "2026-09-17T20:28:42.026Z"
+    },
+    {
+      "id": "8dcffc35-86de-45ab-a47c-fc3a974b1f6d",
+      "name": "Marketing",
+      "description": "Marketing Department",
+      "createdAt": "2026-09-17T20:28:42.030Z",
+      "updatedAt": "2026-09-17T20:28:42.030Z"
+    }
+  ],
+  "designations": [
+    {
+      "id": "7627e998-1cde-4b4b-a746-96d369b32b50",
+      "name": "Sales Executive",
+      "departmentId": "1c8fc1be-7a1a-4491-ade9-c9998ced631b",
+      "createdAt": "2026-09-17T20:23:04.466Z",
+      "updatedAt": "2026-09-17T20:23:04.466Z"
+    },
+    {
+      "id": "9bc9ce51-5b5a-44e9-bd76-0c76c26d80ab",
+      "name": "Sales Manager",
+      "departmentId": "1c8fc1be-7a1a-4491-ade9-c9998ced631b",
+      "createdAt": "2026-09-17T20:23:04.505Z",
+      "updatedAt": "2026-09-17T20:23:04.505Z"
+    },
+    {
+      "id": "b2ecd4f4-e30d-4ec6-8be8-d38f227f7c6b",
+      "name": "Accountant",
+      "departmentId": "1c8fc1be-7a1a-4491-ade9-c9998ced631b",
+      "createdAt": "2026-09-17T20:24:47.625Z",
+      "updatedAt": "2026-09-17T20:24:47.625Z"
+    },
+    {
+      "id": "28f6bad6-7dba-4250-ac61-d4b1a4720064",
+      "name": "Operations Manager",
+      "departmentId": "1c8fc1be-7a1a-4491-ade9-c9998ced631b",
+      "createdAt": "2026-09-17T20:25:27.986Z",
+      "updatedAt": "2026-09-17T20:25:27.986Z"
+    },
+    {
+      "id": "1106624c-354b-4140-afeb-7108ff11e47f",
+      "name": "Managing Director",
+      "departmentId": "021fdc37-db28-4eb3-9176-76a0d8cd1b2a",
+      "createdAt": "2026-09-17T20:43:31.623Z",
+      "updatedAt": "2026-09-17T20:43:31.623Z"
+    },
+    {
+      "id": "6d3a496f-629f-4966-a670-445abf2f88c5",
+      "name": "CEO",
+      "departmentId": "021fdc37-db28-4eb3-9176-76a0d8cd1b2a",
+      "createdAt": "2026-09-17T20:43:31.632Z",
+      "updatedAt": "2026-09-17T20:43:31.632Z"
+    },
+    {
+      "id": "1c5a3935-4e4b-4a1e-be76-7a31fa545d08",
+      "name": "General Manager",
+      "departmentId": "021fdc37-db28-4eb3-9176-76a0d8cd1b2a",
+      "createdAt": "2026-09-17T20:43:31.636Z",
+      "updatedAt": "2026-09-17T20:43:31.636Z"
+    },
+    {
+      "id": "90ac0086-6880-47c0-a8df-c14e701c2d4b",
+      "name": "HR Manager",
+      "departmentId": "23ad2883-0945-4fea-ae05-a0dc9c8baf85",
+      "createdAt": "2026-09-17T20:43:31.641Z",
+      "updatedAt": "2026-09-17T20:43:31.641Z"
+    },
+    {
+      "id": "8d30c738-3beb-4b07-ae20-e3866ea8329b",
+      "name": "HR Executive",
+      "departmentId": "23ad2883-0945-4fea-ae05-a0dc9c8baf85",
+      "createdAt": "2026-09-17T20:43:31.644Z",
+      "updatedAt": "2026-09-17T20:43:31.644Z"
+    },
+    {
+      "id": "0b00aa3b-e367-4951-b052-823c25bc3017",
+      "name": "Sales Manager",
+      "departmentId": "aee4e1bc-d788-4db8-a603-21c36be8edb7",
+      "createdAt": "2026-09-17T20:43:31.649Z",
+      "updatedAt": "2026-09-17T20:43:31.649Z"
+    },
+    {
+      "id": "6bd3f829-2650-4c26-94c5-57037baf794d",
+      "name": "Sales Executive",
+      "departmentId": "aee4e1bc-d788-4db8-a603-21c36be8edb7",
+      "createdAt": "2026-09-17T20:43:31.652Z",
+      "updatedAt": "2026-09-17T20:43:31.652Z"
+    },
+    {
+      "id": "e594f0ff-7f50-4e9d-9269-74971760eb32",
+      "name": "Senior Travel Consultant",
+      "departmentId": "aee4e1bc-d788-4db8-a603-21c36be8edb7",
+      "createdAt": "2026-09-17T20:43:31.654Z",
+      "updatedAt": "2026-09-17T20:43:31.654Z"
+    },
+    {
+      "id": "66b0acb3-07c2-46d5-b54c-0eff550a4447",
+      "name": "Travel Consultant",
+      "departmentId": "aee4e1bc-d788-4db8-a603-21c36be8edb7",
+      "createdAt": "2026-09-17T20:43:31.658Z",
+      "updatedAt": "2026-09-17T20:43:31.658Z"
+    },
+    {
+      "id": "785ee5ac-7f35-4133-aa2e-8ecbac9025cd",
+      "name": "Operations Manager",
+      "departmentId": "9fff2a9a-d050-48b3-baa7-8ba36eeaf56e",
+      "createdAt": "2026-09-17T20:43:31.661Z",
+      "updatedAt": "2026-09-17T20:43:31.661Z"
+    },
+    {
+      "id": "e4773d24-29bc-4863-a4a8-457f9925d7a5",
+      "name": "Operations Executive",
+      "departmentId": "9fff2a9a-d050-48b3-baa7-8ba36eeaf56e",
+      "createdAt": "2026-09-17T20:43:31.663Z",
+      "updatedAt": "2026-09-17T20:43:31.663Z"
+    },
+    {
+      "id": "62e8b8a4-4cdc-433a-9ef3-8bdbe90558ac",
+      "name": "Accountant",
+      "departmentId": "2a17ba97-5468-4d1f-8bcf-49de96e465a6",
+      "createdAt": "2026-09-17T20:43:31.666Z",
+      "updatedAt": "2026-09-17T20:43:31.666Z"
+    },
+    {
+      "id": "71918aa3-74fe-448c-8a55-9ff9dbadf3ac",
+      "name": "Reservation Manager",
+      "departmentId": "e0be644f-7698-43f9-9182-9a4009481367",
+      "createdAt": "2026-09-17T20:43:31.668Z",
+      "updatedAt": "2026-09-17T20:43:31.668Z"
+    },
+    {
+      "id": "659d550e-922b-4fcf-9b39-bcd59fd04c20",
+      "name": "Reservation Executive",
+      "departmentId": "e0be644f-7698-43f9-9182-9a4009481367",
+      "createdAt": "2026-09-17T20:43:31.670Z",
+      "updatedAt": "2026-09-17T20:43:31.670Z"
+    },
+    {
+      "id": "d8b72e78-e7a8-4185-bf3c-d45b04dd16c1",
+      "name": "Marketing Manager",
+      "departmentId": "8dcffc35-86de-45ab-a47c-fc3a974b1f6d",
+      "createdAt": "2026-09-17T20:43:31.673Z",
+      "updatedAt": "2026-09-17T20:43:31.673Z"
+    },
+    {
+      "id": "c9526732-3d8f-474b-9119-05cd35656088",
+      "name": "Marketing Executive",
+      "departmentId": "8dcffc35-86de-45ab-a47c-fc3a974b1f6d",
+      "createdAt": "2026-09-17T20:43:31.675Z",
+      "updatedAt": "2026-09-17T20:43:31.675Z"
+    },
+    {
+      "id": "443561aa-0252-4937-8ba9-46c7a28fafbd",
+      "name": "Other",
+      "departmentId": "1c8fc1be-7a1a-4491-ade9-c9998ced631b",
+      "createdAt": "2026-09-17T20:43:31.678Z",
+      "updatedAt": "2026-09-17T20:43:31.678Z"
+    }
+  ],
+  "employees": [
+    {
+      "id": "f559884d-5cf6-4b0e-80ac-f07de0ce7f2a",
+      "employeeId": "EMP-001",
+      "userId": "f45f54e8-71b1-4af3-93ec-f8b49c5dcf47",
+      "firstName": "John",
+      "lastName": "Doe",
+      "dateOfBirth": null,
+      "address": null,
+      "emergencyContact": null,
+      "profilePhoto": null,
+      "joiningDate": "2026-09-17T19:45:38.344Z",
+      "exitDate": null,
+      "status": "ACTIVE",
+      "employmentType": "FULL_TIME",
+      "departmentId": null,
+      "designationId": null,
+      "reportingManagerId": null,
+      "bankDetails": null,
+      "createdAt": "2026-09-17T19:45:38.344Z",
+      "updatedAt": "2026-09-17T19:45:38.344Z"
+    },
+    {
+      "id": "a4d27b41-cd15-4fe0-8309-39dbf4c99309",
+      "employeeId": "EMP-003",
+      "userId": "33e9e667-16f9-46d5-86c9-8e96836d3e90",
+      "firstName": "New",
+      "lastName": "Employee",
+      "dateOfBirth": null,
+      "address": null,
+      "emergencyContact": null,
+      "profilePhoto": null,
+      "joiningDate": "2026-09-17T20:23:04.476Z",
+      "exitDate": null,
+      "status": "ACTIVE",
+      "employmentType": "FULL_TIME",
+      "departmentId": "1c8fc1be-7a1a-4491-ade9-c9998ced631b",
+      "designationId": "9bc9ce51-5b5a-44e9-bd76-0c76c26d80ab",
+      "reportingManagerId": null,
+      "bankDetails": null,
+      "createdAt": "2026-09-17T20:23:04.478Z",
+      "updatedAt": "2026-09-17T20:23:04.506Z"
+    },
+    {
+      "id": "d69ce526-08f9-4a11-a59f-9c5b28eee568",
+      "employeeId": "EMP-999",
+      "userId": "c8499716-f5e8-41e8-9a59-89057883ce70",
+      "firstName": "poda",
+      "lastName": "Tester",
+      "dateOfBirth": null,
+      "address": null,
+      "emergencyContact": null,
+      "profilePhoto": null,
+      "joiningDate": "2026-09-17T20:15:23.869Z",
+      "exitDate": null,
+      "status": "INACTIVE",
+      "employmentType": "FULL_TIME",
+      "departmentId": null,
+      "designationId": "b2ecd4f4-e30d-4ec6-8be8-d38f227f7c6b",
+      "reportingManagerId": null,
+      "bankDetails": null,
+      "createdAt": "2026-09-17T20:15:23.871Z",
+      "updatedAt": "2026-09-17T20:24:47.628Z"
+    },
+    {
+      "id": "ecc2bb49-cac5-4e45-907a-f980288022cd",
+      "employeeId": "1234",
+      "userId": "b8e76cf8-2c0d-4bce-b2ae-abcaad1403fe",
+      "firstName": "moosa",
+      "lastName": "ci",
+      "dateOfBirth": null,
+      "address": null,
+      "emergencyContact": null,
+      "profilePhoto": null,
+      "joiningDate": "2026-09-17T19:47:45.855Z",
+      "exitDate": null,
+      "status": "ACTIVE",
+      "employmentType": "FULL_TIME",
+      "departmentId": null,
+      "designationId": "28f6bad6-7dba-4250-ac61-d4b1a4720064",
+      "reportingManagerId": null,
+      "bankDetails": null,
+      "createdAt": "2026-09-17T19:47:45.857Z",
+      "updatedAt": "2026-09-17T20:25:27.988Z"
+    },
+    {
+      "id": "c1235bef-d4aa-4bfb-9f1c-5cce8308b808",
+      "employeeId": "EMP-99999",
+      "userId": "bef9f501-388e-4752-b48c-5c91ffeeb014",
+      "firstName": "Test",
+      "lastName": "User",
+      "dateOfBirth": null,
+      "address": null,
+      "emergencyContact": null,
+      "profilePhoto": null,
+      "joiningDate": "2026-09-17T21:18:27.334Z",
+      "exitDate": null,
+      "status": "ACTIVE",
+      "employmentType": "FULL_TIME",
+      "departmentId": "9fff2a9a-d050-48b3-baa7-8ba36eeaf56e",
+      "designationId": "62e8b8a4-4cdc-433a-9ef3-8bdbe90558ac",
+      "reportingManagerId": null,
+      "bankDetails": null,
+      "createdAt": "2026-09-17T21:18:27.336Z",
+      "updatedAt": "2026-09-17T21:18:47.513Z"
+    }
+  ]
+}

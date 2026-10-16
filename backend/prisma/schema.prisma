@@ -1,0 +1,1614 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String          @id @default(uuid())
+  email           String          @unique
+  passwordHash    String
+  isActive        Boolean         @default(true)
+  lastLogin       DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  roleId          String?
+  blogPosts       BlogPost[]
+  employee        Employee?
+  role            Role?           @relation(fields: [roleId], references: [id])
+  auditLogs       AuditLog[]
+  loginActivities LoginActivity[]
+  notifications   Notification[]
+}
+
+model Role {
+  id          String       @id @default(uuid())
+  name        String       @unique
+  description String?
+  isSystem    Boolean      @default(false)
+  users       User[]
+  permissions Permission[] @relation("RolePermissions")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @default(now()) @updatedAt
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  module      String   @default("General")
+  action      String   @default("View")
+  description String?
+  roles       Role[]   @relation("RolePermissions")
+  createdAt   DateTime @default(now())
+}
+
+model Department {
+  id           String        @id @default(uuid())
+  name         String        @unique
+  description  String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  designations Designation[]
+  employees    Employee[]
+}
+
+model Designation {
+  id           String     @id @default(uuid())
+  name         String
+  departmentId String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  isActive     Boolean    @default(true)
+  department   Department @relation(fields: [departmentId], references: [id])
+  employees    Employee[]
+
+  @@unique([name, departmentId])
+}
+
+model Employee {
+  id                            String                      @id @default(uuid())
+  userId                        String                      @unique
+  firstName                     String
+  lastName                      String
+  createdAt                     DateTime                    @default(now())
+  updatedAt                     DateTime                    @updatedAt
+  address                       String?
+  bankDetails                   String?
+  dateOfBirth                   DateTime?
+  departmentId                  String?
+  designationId                 String?
+  emergencyContact              String?
+  employeeId                    String                      @unique
+  employmentType                String                      @default("FULL_TIME")
+  exitDate                      DateTime?
+  joiningDate                   DateTime                    @default(now())
+  profilePhoto                  String?
+  reportingManagerId            String?
+  status                        String                      @default("ACTIVE")
+  department                    Department?                 @relation(fields: [departmentId], references: [id])
+  designation                   Designation?                @relation(fields: [designationId], references: [id])
+  reportingManager              Employee?                   @relation("ReportingManager", fields: [reportingManagerId], references: [id])
+  subordinates                  Employee[]                  @relation("ReportingManager")
+  user                          User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activities                    EmployeeActivity[]
+  bonuses                       EmployeeBonus[]
+  documents                     EmployeeDocument[]
+  incentives                    EmployeeIncentive[]
+  payouts                       EmployeePayout[]
+  assignedEnquiries             EnquiryAssignment[]
+  followUps                     FollowUp[]
+  salaries                      SalaryRecord[]
+  salaryStructure               SalaryStructure?
+  assignedLeads                 SalesLead[]
+  salesActivities               SalesActivity[]
+  bookingPreps                  BookingPreparation[]
+  approvedExpenses              Expense[]                   @relation("ExpenseApprovedBy")
+  createdExpenses               Expense[]                   @relation("ExpenseCreatedBy")
+  createdTransactions           FinancialTransaction[]
+  revenueRecords                RevenueRecord[]
+  toursCoordinated              Tour[]                      @relation("TourCoordinator")
+  coordinatorHistory            TourCoordinatorAssignment[] @relation("CoordinatorHistory")
+  coordinatorAssignmentsCreated TourCoordinatorAssignment[] @relation("CoordinatorAssignedBy")
+  assignedOperationalTasks      OperationalTask[]           @relation("TaskAssignedEmployee")
+  completedOperationalTasks     OperationalTask[]           @relation("TaskCompletedByEmployee")
+  createdOperationalCosts       OperationalCost[]           @relation("OperationalCostCreatedBy")
+  uploadedOperationsDocuments   OperationsDocument[]        @relation("DocumentUploadedBy")
+  createdGroupTours             GroupTour[]                 @relation("GroupTourCreatedBy")
+  attendances                   EmployeeAttendance[]
+  targets                       EmployeeTarget[]
+  leaveRequests                 LeaveRequest[]
+  leaveBalances                 EmployeeLeaveBalance[]
+}
+
+model EmployeeDocument {
+  id                 String    @id @default(uuid())
+  employeeId         String
+  documentType       String
+  title              String
+  fileUrl            String
+  verificationStatus String    @default("PENDING")
+  expiryDate         DateTime?
+  uploadedById       String
+  uploadedAt         DateTime  @default(now())
+  employee           Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model SalaryStructure {
+  id            String            @id @default(uuid())
+  employeeId    String            @unique
+  basicSalary   Float
+  effectiveDate DateTime          @default(now())
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  allowances    SalaryAllowance[]
+  deductions    SalaryDeduction[]
+  employee      Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model SalaryAllowance {
+  id                String          @id @default(uuid())
+  name              String
+  amount            Float
+  salaryStructureId String
+  salaryStructure   SalaryStructure @relation(fields: [salaryStructureId], references: [id], onDelete: Cascade)
+}
+
+model SalaryDeduction {
+  id                String          @id @default(uuid())
+  name              String
+  amount            Float
+  salaryStructureId String
+  salaryStructure   SalaryStructure @relation(fields: [salaryStructureId], references: [id], onDelete: Cascade)
+}
+
+model SalaryRecord {
+  id              String   @id @default(uuid())
+  employeeId      String
+  month           Int
+  year            Int
+  basicSalary     Float
+  totalAllowances Float
+  totalDeductions Float
+  totalBonuses    Float
+  netSalary       Float
+  status          String   @default("PENDING")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  transactionId String?               @unique
+  employee      Employee              @relation(fields: [employeeId], references: [id])
+  transaction   FinancialTransaction? @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, month, year])
+}
+
+model EmployeeBonus {
+  id           String   @id @default(uuid())
+  employeeId   String
+  amount       Float
+  reason       String
+  period       String?
+  status       String   @default("DRAFT")
+  createdById  String
+  approvedById String?
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  transactionId String?               @unique
+  employee      Employee              @relation(fields: [employeeId], references: [id])
+  transaction   FinancialTransaction? @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+}
+
+model EmployeeIncentive {
+  id           String   @id @default(uuid())
+  employeeId   String
+  amount       Float
+  type         String
+  reason       String
+  period       String?
+  status       String   @default("DRAFT")
+  createdById  String
+  approvedById String?
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  transactionId String?               @unique
+  employee      Employee              @relation(fields: [employeeId], references: [id])
+  transaction   FinancialTransaction? @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+}
+
+model EmployeePayout {
+  id              String    @id @default(uuid())
+  employeeId      String
+  payoutType      String
+  amount          Float
+  paymentDate     DateTime?
+  paymentMethod   String?
+  referenceNumber String?
+  status          String    @default("PENDING")
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  employee        Employee  @relation(fields: [employeeId], references: [id])
+}
+
+model EmployeeActivity {
+  id          String   @id @default(uuid())
+  employeeId  String
+  action      String
+  description String?
+  createdById String
+  createdAt   DateTime @default(now())
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model Customer {
+  id                    String                 @id @default(uuid())
+  firstName             String
+  lastName              String?
+  email                 String                 @unique
+  phone                 String?
+  whatsappNumber        String?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  enquiries             Enquiry[]
+  salesLeads            SalesLead[]
+  quotations            Quotation[]
+  bookingPreps          BookingPreparation[]
+  payments              CustomerPayment[]
+  refunds               Refund[]
+  revenueRecords        RevenueRecord[]
+  tours                 Tour[]
+  hotelReservations     HotelReservation[]
+  transportReservations TransportReservation[]
+  operationsDocuments   OperationsDocument[]
+  groupTourBookings     GroupTourBooking[]
+  FollowUp              FollowUp[]
+}
+
+model Enquiry {
+  id                String                 @id @default(uuid())
+  referenceNumber   String                 @unique
+  source            String
+  status            String                 @default("NEW")
+  customerId        String
+  packageId         String?
+  destination       String?
+  travelDate        String?
+  travellerCount    Int?
+  adultCount        Int?
+  childCount        Int?
+  budgetRange       String?
+  preferredContact  String?
+  message           String?
+  specialRequests   String?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  customer          Customer               @relation(fields: [customerId], references: [id])
+  package           TravelPackage?         @relation(fields: [packageId], references: [id])
+  assignments       EnquiryAssignment[]
+  notes             EnquiryNote[]
+  statusHistory     EnquiryStatusHistory[]
+  followUps         FollowUp[]
+  salesLead         SalesLead?
+  groupTourBookings GroupTourBooking[]
+
+  @@index([status])
+  @@index([referenceNumber])
+}
+
+model EnquiryStatusHistory {
+  id          String   @id @default(uuid())
+  enquiryId   String
+  oldStatus   String?
+  newStatus   String
+  updatedById String?
+  remarks     String?
+  createdAt   DateTime @default(now())
+  enquiry     Enquiry  @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+}
+
+model EnquiryNote {
+  id        String   @id @default(uuid())
+  text      String
+  enquiryId String
+  authorId  String
+  createdAt DateTime @default(now())
+  enquiry   Enquiry  @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+}
+
+model EnquiryAssignment {
+  id         String   @id @default(uuid())
+  enquiryId  String
+  employeeId String
+  assignedAt DateTime @default(now())
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  enquiry    Enquiry  @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+}
+
+model FollowUp {
+  id            String  @id @default(uuid())
+  enquiryId     String?
+  salesLeadId   String?
+  customerId    String?
+  quotationId   String?
+  bookingPrepId String?
+  tourId        String?
+
+  type         String
+  notes        String?
+  scheduledFor DateTime
+  status       String              @default("PENDING")
+  employeeId   String
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  employee     Employee            @relation(fields: [employeeId], references: [id])
+  enquiry      Enquiry?            @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+  salesLead    SalesLead?          @relation("LeadFollowUps", fields: [salesLeadId], references: [id], onDelete: Cascade)
+  customer     Customer?           @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  quotation    Quotation?          @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  bookingPrep  BookingPreparation? @relation(fields: [bookingPrepId], references: [id], onDelete: Cascade)
+  tour         Tour?               @relation(fields: [tourId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id                String    @id @default(uuid())
+  recipientId       String
+  type              String // 'INFO', 'WARNING', 'SUCCESS', 'ERROR'
+  title             String
+  message           String
+  relatedEntityType String? // 'ENQUIRY', 'LEAD', 'QUOTATION', 'BOOKING', 'PAYMENT', 'TOUR', etc.
+  relatedEntityId   String?
+  isRead            Boolean   @default(false)
+  readAt            DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  recipient User @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId])
+  @@index([createdAt])
+  @@index([isRead])
+}
+
+model BlogCategory {
+  id          String     @id @default(uuid())
+  name        String     @unique
+  slug        String     @unique
+  description String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  posts       BlogPost[]
+}
+
+model BlogPost {
+  id            String        @id @default(uuid())
+  title         String
+  slug          String        @unique
+  content       String
+  excerpt       String?
+  featuredImage String?
+  isFeatured    Boolean       @default(false)
+  status        String        @default("DRAFT")
+  publishedAt   DateTime?
+  categoryId    String?
+  authorId      String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  author        User          @relation(fields: [authorId], references: [id])
+  category      BlogCategory? @relation(fields: [categoryId], references: [id])
+
+  @@index([status])
+  @@index([slug])
+}
+
+model Destination {
+  id          String          @id @default(uuid())
+  name        String          @unique
+  slug        String          @unique
+  tagline     String?
+  description String?
+  image       String?
+  latitude    Float?
+  longitude   Float?
+  isActive    Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  packages    TravelPackage[]
+}
+
+model HomepageContent {
+  id               String   @id @default("default")
+  heroTitle        String   @default("Into The Heart of Ceylon")
+  heroSubtitle     String   @default("Tea trails, scenic train journeys, wildlife safaris and coastal charm across Sri Lanka.")
+  heroImage        String   @default("https://images.unsplash.com/photo-1546708973-b339540b5162?q=80&w=1600&auto=format&fit=crop")
+  heroActive       Boolean  @default(true)
+  heroMediaType    String   @default("IMAGE")
+  heroVideoUrl     String?
+  heroVideoActive  Boolean  @default(true)
+  primaryCtaText   String   @default("Plan My Trip")
+  primaryCtaLink   String   @default("#date-selection")
+  secondaryCtaText String   @default("Customise This Journey")
+  secondaryCtaLink String   @default("#date-selection")
+  videoTitle       String   @default("Journey Through Ceylon & Beyond")
+  videoDescription String   @default("Watch our signature travel highlights, luxury resort stays, and scenic expeditions across breathtaking destinations.")
+  videoUrl         String   @default("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+  videoActive      Boolean  @default(true)
+  mapTitle         String   @default("Explore Our Global Travel Destinations")
+  mapSubtitle      String   @default("Interactive map highlighting our signature destinations, luxury tours, and exclusive packages.")
+  mapActive        Boolean  @default(true)
+  mapImage         String?
+    dynamicSections  Json?
+  updatedAt        DateTime @updatedAt
+}
+
+model HomepageHeroMedia {
+  id           String   @id @default(uuid())
+  title        String?
+  mediaType    String   @default("IMAGE")
+  url          String
+  displayOrder Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model PackageCategory {
+  id          String          @id @default(uuid())
+  name        String          @unique
+  slug        String          @unique
+  description String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  packages    TravelPackage[]
+}
+
+model TravelType {
+  id        String          @id @default(uuid())
+  name      String          @unique
+  slug      String          @unique
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  packages  TravelPackage[]
+}
+
+model TravelPackage {
+  id              String                @id @default(uuid())
+  title           String
+  slug            String                @unique
+  overview        String
+  durationDays    Int
+  durationNights  Int
+  destinationId   String
+  categoryId      String?
+  travelTypeId    String?
+  isFeatured      Boolean               @default(false)
+  isTrending      Boolean               @default(false)
+  isPopular       Boolean               @default(false)
+  status          String                @default("DRAFT")
+  basePrice       Float?
+  currency        String                @default("INR")
+  priceType       String                @default("FIXED")
+  heroImage       String?
+  highlightsVideo String?
+  mapImage         String?
+    dynamicSections  Json?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  crmEnquiries    Enquiry[]
+  exclusions      PackageExclusion[]
+  highlights      PackageHighlight[]
+  images          PackageImage[]
+  inclusions      PackageInclusion[]
+  itineraryDays   PackageItinerary[]
+  pricingVars     PackagePricing[]
+  videos          PackageVideo[]
+  availabilities  PackageAvailability[]
+  topHighlights   PackageTopHighlight[]
+  category        PackageCategory?      @relation(fields: [categoryId], references: [id])
+  destination     Destination           @relation(fields: [destinationId], references: [id])
+  travelType      TravelType?           @relation(fields: [travelTypeId], references: [id])
+  revenueRecords  RevenueRecord[]
+  tours           Tour[]
+  groupTours      GroupTour[]
+
+  @@index([status])
+  @@index([slug])
+}
+
+model PackageTopHighlight {
+  id           String        @id @default(uuid())
+  packageId    String
+  image        String?
+  title        String
+  description  String?
+  displayOrder Int           @default(0)
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  package      TravelPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@index([packageId])
+}
+
+model PackageImage {
+  id         String        @id @default(uuid())
+  url        String
+  altText    String?
+  isFeatured Boolean       @default(false)
+  packageId  String
+  package    TravelPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+}
+
+model PackageVideo {
+  id        String        @id @default(uuid())
+  url       String
+  title     String?
+  packageId String
+  package   TravelPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+}
+
+model PackageHighlight {
+  id        String        @id @default(uuid())
+  text      String
+  packageId String
+  package   TravelPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+}
+
+model PackageItinerary {
+  id            String              @id @default(uuid())
+  dayNumber     Int
+  title         String
+  location      String?
+  description   String
+  mealsIncluded String?
+  accommodation String?
+  image         String?
+  packageId     String
+  activities    ItineraryActivity[]
+  package       TravelPackage       @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@unique([packageId, dayNumber])
+}
+
+model ItineraryActivity {
+  id           String           @id @default(uuid())
+  time         String?
+  description  String
+  itineraryId  String
+  itineraryDay PackageItinerary @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
+}
+
+model PackageInclusion {
+  id        String        @id @default(uuid())
+  text      String
+  packageId String
+  package   TravelPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+}
+
+model PackageExclusion {
+  id        String        @id @default(uuid())
+  text      String
+  packageId String
+  package   TravelPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+}
+
+model PackagePricing {
+  id               String         @id @default(uuid())
+  title            String
+  price            Float
+  adultPrice       Float          @default(0)
+  child6to17Price  Float          @default(0)
+  child2to5Price   Float          @default(0)
+  infantPrice      Float          @default(0)
+  currency         String         @default("INR")
+  packageId        String?
+  package          TravelPackage? @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  tourId           String?
+  tour             Tour?          @relation(fields: [tourId], references: [id], onDelete: Cascade)
+  groupTourId      String?
+  groupTour        GroupTour?     @relation(fields: [groupTourId], references: [id], onDelete: Cascade)
+}
+
+model PackageAvailability {
+  id             String        @id @default(uuid())
+  packageId      String
+  startDate      DateTime
+  endDate        DateTime
+  isGroupTour    Boolean       @default(false)
+  isAvailable    Boolean       @default(true)
+  totalSeats     Int?
+  availableSeats Int?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  package        TravelPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@index([packageId])
+  @@index([startDate])
+}
+
+model GlobalAvailability {
+  id          String   @id @default(uuid())
+  date        DateTime @unique
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// --- SALES CRM MODULE ---
+
+model SalesPipelineStage {
+  id          String      @id @default(uuid())
+  name        String      @unique
+  description String?
+  orderIndex  Int         @default(0)
+  color       String      @default("#3B82F6")
+  isDefault   Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  leads       SalesLead[]
+}
+
+model SalesLead {
+  id            String @id @default(uuid())
+  title         String
+  source        String
+  status        String @default("NEW")
+  expectedValue Float?
+  currency      String @default("INR")
+  priority      String @default("MEDIUM")
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  pipelineStageId String?
+  pipelineStage   SalesPipelineStage? @relation(fields: [pipelineStageId], references: [id])
+
+  assignedToId String?
+  assignedTo   Employee? @relation(fields: [assignedToId], references: [id])
+
+  enquiryId String?  @unique
+  enquiry   Enquiry? @relation(fields: [enquiryId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  requirements CustomerRequirement?
+  quotations   Quotation[]
+  activities   SalesActivity[]
+  followUps    FollowUp[]           @relation("LeadFollowUps")
+}
+
+model CustomerRequirement {
+  id                       String    @id @default(uuid())
+  salesLeadId              String    @unique
+  salesLead                SalesLead @relation(fields: [salesLeadId], references: [id], onDelete: Cascade)
+  destination              String?
+  travelDates              String?
+  travellerCount           Int?
+  adultCount               Int?
+  childCount               Int?
+  budget                   Float?
+  currency                 String    @default("INR")
+  accommodationPreference  String?
+  transportationPreference String?
+  activities               String?
+  mealPreferences          String?
+  specialRequirements      String?
+  notes                    String?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+}
+
+model Quotation {
+  id              String   @id @default(uuid())
+  quotationNumber String   @unique
+  salesLeadId     String
+  customerId      String
+  status          String   @default("DRAFT")
+  validityDate    DateTime
+  packageId       String?
+  destination     String?
+  travelDates     String?
+  duration        String?
+
+  basePrice         Float
+  additionalCharges Float  @default(0)
+  discounts         Float  @default(0)
+  taxes             Float  @default(0)
+  finalAmount       Float
+  currency          String @default("INR")
+
+  gstApplicable  Boolean @default(true)
+  gstType        String  @default("GST") // GST, NON_GST, EXEMPT
+  gstRate        Float   @default(0)
+  taxableAmount  Float   @default(0)
+  cgstAmount     Float   @default(0)
+  sgstAmount     Float   @default(0)
+  igstAmount     Float   @default(0)
+  totalTaxAmount Float   @default(0)
+  placeOfSupply  String?
+
+  paymentTerms    String?
+  termsConditions String?
+  internalNotes   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  salesLead      SalesLead                @relation(fields: [salesLeadId], references: [id])
+  customer       Customer                 @relation(fields: [customerId], references: [id])
+  items          QuotationItem[]
+  statusHistory  QuotationStatusHistory[]
+  documents      QuotationDocument[]
+  bookingPrep    BookingPreparation?
+  payments       CustomerPayment[]
+  refunds        Refund[]
+  revenueRecords RevenueRecord[]
+  tours          Tour[]
+  FollowUp       FollowUp[]
+}
+
+model QuotationItem {
+  id          String    @id @default(uuid())
+  quotationId String
+  title       String
+  description String?
+  quantity    Int       @default(1)
+  unitPrice   Float
+  totalPrice  Float
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+}
+
+model QuotationStatusHistory {
+  id          String    @id @default(uuid())
+  quotationId String
+  oldStatus   String?
+  newStatus   String
+  remarks     String?
+  updatedById String
+  createdAt   DateTime  @default(now())
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+}
+
+model QuotationDocument {
+  id          String    @id @default(uuid())
+  quotationId String
+  fileUrl     String
+  fileName    String
+  createdAt   DateTime  @default(now())
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+}
+
+model BookingPreparation {
+  id           String   @id @default(uuid())
+  bookingRef   String   @unique
+  quotationId  String   @unique
+  customerId   String
+  preparedById String
+  notes        String?
+  status       String   @default("PENDING")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  gstApplicable  Boolean @default(true)
+  gstType        String  @default("GST")
+  gstRate        Float   @default(0)
+  taxableAmount  Float   @default(0)
+  cgstAmount     Float   @default(0)
+  sgstAmount     Float   @default(0)
+  igstAmount     Float   @default(0)
+  totalTaxAmount Float   @default(0)
+  placeOfSupply  String?
+
+  quotation        Quotation         @relation(fields: [quotationId], references: [id])
+  customer         Customer          @relation(fields: [customerId], references: [id])
+  preparedBy       Employee          @relation(fields: [preparedById], references: [id])
+  payments         CustomerPayment[]
+  revenueRecords   RevenueRecord[]
+  tours            Tour[]
+  operationalCosts OperationalCost[]
+  FollowUp         FollowUp[]
+}
+
+model SalesActivity {
+  id          String   @id @default(uuid())
+  salesLeadId String
+  employeeId  String
+  action      String
+  description String?
+  createdAt   DateTime @default(now())
+
+  salesLead SalesLead @relation(fields: [salesLeadId], references: [id], onDelete: Cascade)
+  employee  Employee  @relation(fields: [employeeId], references: [id])
+}
+
+// --- ACCOUNTING MODULE ---
+
+model FinancialTransaction {
+  id              String   @id @default(uuid())
+  referenceNumber String   @unique
+  type            String // INCOME, EXPENSE, REFUND, SALARY
+  amount          Float
+  currency        String   @default("INR")
+  date            DateTime @default(now())
+  status          String   @default("COMPLETED")
+  paymentMethod   String?
+  notes           String?
+  createdById     String?
+
+  createdBy Employee? @relation(fields: [createdById], references: [id])
+
+  customerPayment   CustomerPayment?
+  expense           Expense?
+  refund            Refund?
+  gstRecord         GSTRecord?
+  salaryRecord      SalaryRecord?
+  employeeBonus     EmployeeBonus?
+  employeeIncentive EmployeeIncentive?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CustomerPayment {
+  id            String  @id @default(uuid())
+  transactionId String  @unique
+  customerId    String
+  quotationId   String?
+  bookingPrepId String?
+  paymentType   String  @default("PARTIAL")
+
+  transaction   FinancialTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  customer      Customer             @relation(fields: [customerId], references: [id])
+  quotation     Quotation?           @relation(fields: [quotationId], references: [id])
+  bookingPrep   BookingPreparation?  @relation(fields: [bookingPrepId], references: [id])
+  revenueRecord RevenueRecord?
+}
+
+model ExpenseCategory {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  expenses Expense[]
+}
+
+model Expense {
+  id            String    @id @default(uuid())
+  expenseNumber String    @unique
+  title         String
+  description   String?
+  subCategory   String?
+  vendorName    String?
+  vendorContact String?
+  vendorGstin   String?
+  expenseDate   DateTime
+  paymentDate   DateTime?
+  paymentMethod String?
+  status        String    @default("DRAFT") // DRAFT, SUBMITTED, APPROVED, PAID, REJECTED, CANCELLED
+
+  // Financial & GST Fields
+  amount         Float
+  taxableAmount  Float   @default(0)
+  gstApplicable  Boolean @default(true)
+  gstType        String  @default("GST")
+  gstRate        Float   @default(0)
+  cgstAmount     Float   @default(0)
+  sgstAmount     Float   @default(0)
+  igstAmount     Float   @default(0)
+  totalTaxAmount Float   @default(0)
+  totalAmount    Float
+
+  transactionId String? @unique
+  categoryId    String
+  receiptUrl    String?
+
+  approvedById String?
+  createdById  String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transaction     FinancialTransaction? @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  category        ExpenseCategory       @relation(fields: [categoryId], references: [id])
+  approvedBy      Employee?             @relation("ExpenseApprovedBy", fields: [approvedById], references: [id])
+  createdBy       Employee              @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
+  operationalCost OperationalCost?
+}
+
+model Refund {
+  id            String  @id @default(uuid())
+  transactionId String  @unique
+  customerId    String
+  quotationId   String?
+  reason        String?
+
+  transaction FinancialTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  customer    Customer             @relation(fields: [customerId], references: [id])
+  quotation   Quotation?           @relation(fields: [quotationId], references: [id])
+}
+
+model GSTRecord {
+  id            String    @id @default(uuid())
+  transactionId String    @unique
+  gstNumber     String?
+  taxableAmount Float
+  cgst          Float     @default(0)
+  sgst          Float     @default(0)
+  igst          Float     @default(0)
+  totalGst      Float     @default(0)
+  invoiceNumber String?
+  invoiceDate   DateTime?
+
+  transaction FinancialTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+}
+
+model RevenueRecord {
+  id              String   @id @default(uuid())
+  referenceNumber String   @unique // Revenue reference
+  customerId      String
+  bookingPrepId   String?
+  quotationId     String?
+  packageId       String?
+  amount          Float
+  currency        String   @default("INR")
+  date            DateTime @default(now())
+  revenueType     String // PACKAGE, CUSTOMIZED_TOUR, BOOKING_SERVICE, OTHER_SERVICE
+  paymentId       String?  @unique // Link to CustomerPayment
+  paymentStatus   String
+  gstStatus       String // GST_INCLUDED, NON_GST
+  createdById     String
+
+  customer    Customer            @relation(fields: [customerId], references: [id])
+  bookingPrep BookingPreparation? @relation(fields: [bookingPrepId], references: [id])
+  quotation   Quotation?          @relation(fields: [quotationId], references: [id])
+  package     TravelPackage?      @relation(fields: [packageId], references: [id])
+  payment     CustomerPayment?    @relation(fields: [paymentId], references: [id])
+  createdBy   Employee            @relation(fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model GSTConfiguration {
+  id             String   @id @default(uuid())
+  isEnabled      Boolean  @default(true)
+  defaultGstRate Float    @default(5)
+  gstin          String?
+  companyName    String?
+  companyAddress String?
+  state          String?
+  stateCode      String?
+  invoicePrefix  String   @default("INV-")
+  pricingMode    String   @default("EXCLUSIVE")
+  updatedAt      DateTime @updatedAt
+}
+
+// --- MODULE 8: OPERATIONS MANAGEMENT CORE MODELS ---
+
+model Tour {
+  id               String   @id @default(uuid())
+  tourReference    String   @unique
+  bookingPrepId    String?
+  quotationId      String?
+  customerId       String
+  packageId        String?
+  destination      String
+  startDate        DateTime
+  endDate          DateTime
+  travellerCount   Int      @default(1)
+  coordinatorId    String?
+  operationalNotes String?
+  status           String   @default("Upcoming") // Upcoming, Preparation, Confirmed, Ongoing, Completed, Cancelled, Postponed
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  customer               Customer                    @relation(fields: [customerId], references: [id])
+  bookingPrep            BookingPreparation?         @relation(fields: [bookingPrepId], references: [id])
+  quotation              Quotation?                  @relation(fields: [quotationId], references: [id])
+  package                TravelPackage?              @relation(fields: [packageId], references: [id])
+  coordinator            Employee?                   @relation("TourCoordinator", fields: [coordinatorId], references: [id])
+  travellers             TourTraveller[]
+  coordinatorAssignments TourCoordinatorAssignment[]
+  checklistTasks         OperationalTask[]
+  flightTickets          FlightTicket[]
+  trainTickets           TrainTicket[]
+  busTickets             BusTicket[]
+  hotelReservations      HotelReservation[]
+  transportReservations  TransportReservation[]
+  operationalCosts       OperationalCost[]
+  operationsDocuments    OperationsDocument[]
+  FollowUp               FollowUp[]
+  pricing                PackagePricing[]
+
+  @@index([status])
+  @@index([startDate])
+  @@index([customerId])
+}
+
+model TourTraveller {
+  id              String   @id @default(uuid())
+  tourId          String
+  name            String
+  age             Int?
+  gender          String?
+  phone           String?
+  email           String?
+  passportNumber  String?
+  idProofType     String?
+  idProofNumber   String?
+  specialRequests String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tour          Tour           @relation(fields: [tourId], references: [id], onDelete: Cascade)
+  flightTickets FlightTicket[]
+  trainTickets  TrainTicket[]
+  busTickets    BusTicket[]
+}
+
+model TourCoordinatorAssignment {
+  id           String    @id @default(uuid())
+  tourId       String
+  employeeId   String
+  assignedById String
+  assignedAt   DateTime  @default(now())
+  unassignedAt DateTime?
+  notes        String?
+  status       String    @default("ACTIVE") // ACTIVE, UNASSIGNED, REASSIGNED
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tour       Tour     @relation(fields: [tourId], references: [id], onDelete: Cascade)
+  employee   Employee @relation("CoordinatorHistory", fields: [employeeId], references: [id])
+  assignedBy Employee @relation("CoordinatorAssignedBy", fields: [assignedById], references: [id])
+
+  @@index([tourId])
+  @@index([employeeId])
+}
+
+model OperationalTask {
+  id                 String    @id @default(uuid())
+  tourId             String
+  task               String
+  category           String    @default("GENERAL")
+  assignedEmployeeId String?
+  dueDate            DateTime?
+  status             String    @default("Pending") // Pending, In Progress, Completed, Cancelled
+  notes              String?
+  completedById      String?
+  completedAt        DateTime?
+  orderIndex         Int       @default(0)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  tour             Tour      @relation(fields: [tourId], references: [id], onDelete: Cascade)
+  assignedEmployee Employee? @relation("TaskAssignedEmployee", fields: [assignedEmployeeId], references: [id])
+  completedBy      Employee? @relation("TaskCompletedByEmployee", fields: [completedById], references: [id])
+
+  @@index([tourId])
+  @@index([status])
+}
+
+model FlightTicket {
+  id                String   @id @default(uuid())
+  tourId            String
+  passengerName     String
+  tourTravellerId   String?
+  bookingReference  String?
+  airline           String
+  flightNumber      String
+  departureAirport  String
+  arrivalAirport    String
+  departureDateTime DateTime
+  arrivalDateTime   DateTime
+  pnr               String
+  ticketNumber      String?
+  ticketStatus      String   @default("Requested") // Requested, Processing, Confirmed, Issued, Cancelled, Rescheduled
+  internalNotes     String?
+  documentRef       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  tour          Tour           @relation(fields: [tourId], references: [id], onDelete: Cascade)
+  tourTraveller TourTraveller? @relation(fields: [tourTravellerId], references: [id], onDelete: SetNull)
+
+  @@index([tourId])
+  @@index([ticketStatus])
+}
+
+model TrainTicket {
+  id                String   @id @default(uuid())
+  tourId            String
+  passengerName     String
+  tourTravellerId   String?
+  operator          String
+  trainNumber       String
+  departureLocation String
+  arrivalLocation   String
+  departureDateTime DateTime
+  arrivalDateTime   DateTime
+  pnr               String
+  seatNumber        String?
+  trainClass        String?
+  ticketStatus      String   @default("Requested") // Requested, Processing, Confirmed, Issued, Cancelled, Rescheduled
+  internalNotes     String?
+  documentRef       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  tour          Tour           @relation(fields: [tourId], references: [id], onDelete: Cascade)
+  tourTraveller TourTraveller? @relation(fields: [tourTravellerId], references: [id], onDelete: SetNull)
+
+  @@index([tourId])
+  @@index([ticketStatus])
+}
+
+model BusTicket {
+  id                String   @id @default(uuid())
+  tourId            String
+  passengerName     String
+  tourTravellerId   String?
+  operator          String
+  busNumber         String?
+  departureLocation String
+  arrivalLocation   String
+  departureDateTime DateTime
+  arrivalDateTime   DateTime
+  pnr               String
+  seatNumber        String?
+  busClass          String?
+  ticketStatus      String   @default("Requested") // Requested, Processing, Confirmed, Issued, Cancelled, Rescheduled
+  internalNotes     String?
+  documentRef       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  tour          Tour           @relation(fields: [tourId], references: [id], onDelete: Cascade)
+  tourTraveller TourTraveller? @relation(fields: [tourTravellerId], references: [id], onDelete: SetNull)
+
+  @@index([tourId])
+  @@index([ticketStatus])
+}
+
+model HotelReservation {
+  id                 String   @id @default(uuid())
+  tourId             String?
+  customerId         String
+  vendorId           String?
+  hotelName          String
+  destination        String
+  vendorReference    String?
+  bookingReference   String?
+  roomType           String?
+  numberOfRooms      Int      @default(1)
+  numberOfGuests     Int      @default(1)
+  checkInDate        DateTime
+  checkOutDate       DateTime
+  mealPlan           String?
+  confirmationNumber String?
+  reservationStatus  String   @default("Requested") // Requested, Pending, Confirmed, Modified, Cancelled, Completed
+  internalNotes      String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  tour     Tour?    @relation(fields: [tourId], references: [id], onDelete: SetNull)
+  customer Customer @relation(fields: [customerId], references: [id])
+  vendor   Vendor?  @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+
+  @@index([tourId])
+  @@index([customerId])
+  @@index([vendorId])
+  @@index([reservationStatus])
+}
+
+// --- MODULE 8 PART 2: VENDOR, OPERATIONAL COST, TRANSPORT & DOCUMENT MODELS ---
+
+model Vendor {
+  id            String   @id @default(uuid())
+  vendorCode    String   @unique
+  companyName   String
+  contactPerson String?
+  phone         String?
+  email         String?
+  address       String?
+  serviceType   String // Hotel, Transport Provider, Airline, Activity Provider, Local Guide, Other Supplier
+  paymentTerms  String?
+  internalNotes String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  hotelReservations     HotelReservation[]
+  transportReservations TransportReservation[]
+  operationalCosts      OperationalCost[]
+
+  @@index([serviceType])
+  @@index([isActive])
+}
+
+model OperationalCost {
+  id              String   @id @default(uuid())
+  costReference   String   @unique
+  tourId          String?
+  bookingPrepId   String?
+  vendorId        String?
+  costCategory    String // Hotel, Flight, Train, Bus, Transportation, Activity, Vendor, Other
+  description     String
+  estimatedCost   Decimal  @default(0.00) @db.Decimal(12, 2)
+  actualCost      Decimal  @default(0.00) @db.Decimal(12, 2)
+  currency        String   @default("INR")
+  paymentStatus   String   @default("Pending") // Pending, Partially Paid, Paid, Cancelled
+  costDate        DateTime @default(now())
+  referenceNumber String?
+  notes           String?
+  expenseId       String?  @unique
+  createdById     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tour        Tour?               @relation(fields: [tourId], references: [id], onDelete: SetNull)
+  bookingPrep BookingPreparation? @relation(fields: [bookingPrepId], references: [id], onDelete: SetNull)
+  vendor      Vendor?             @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  expense     Expense?            @relation(fields: [expenseId], references: [id], onDelete: SetNull)
+  createdBy   Employee?           @relation("OperationalCostCreatedBy", fields: [createdById], references: [id])
+
+  @@index([tourId])
+  @@index([vendorId])
+  @@index([costCategory])
+  @@index([paymentStatus])
+}
+
+model TransportReservation {
+  id                   String    @id @default(uuid())
+  reservationNumber    String    @unique
+  tourId               String?
+  customerId           String?
+  vendorId             String?
+  transportType        String // Car, Bus, Van, Train transfer, Other
+  vehicleServiceNumber String?
+  pickupLocation       String
+  dropLocation         String
+  pickupDateTime       DateTime
+  dropDateTime         DateTime?
+  passengerCount       Int       @default(1)
+  bookingReference     String?
+  confirmationNumber   String?
+  reservationStatus    String    @default("Requested") // Requested, Pending, Confirmed, Modified, Cancelled, Completed
+  estimatedCost        Decimal?  @default(0.00) @db.Decimal(12, 2)
+  actualCost           Decimal?  @default(0.00) @db.Decimal(12, 2)
+  internalNotes        String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  tour     Tour?     @relation(fields: [tourId], references: [id], onDelete: SetNull)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  vendor   Vendor?   @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+
+  @@index([tourId])
+  @@index([customerId])
+  @@index([vendorId])
+  @@index([reservationStatus])
+}
+
+model OperationsDocument {
+  id                 String    @id @default(uuid())
+  documentCode       String    @unique
+  tourId             String?
+  customerId         String?
+  documentType       String // Flight Ticket, Train Ticket, Bus Ticket, Hotel Voucher, Booking Confirmation, Customer Document, Travel Document, Package Document, Operational File, Other
+  fileName           String
+  storageKey         String
+  mimeType           String
+  fileSize           Int
+  uploadedById       String
+  expiryDate         DateTime?
+  verificationStatus String    @default("Pending") // Pending, Verified, Rejected, Expired
+  rejectionReason    String?
+  notes              String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  tour       Tour?     @relation(fields: [tourId], references: [id], onDelete: SetNull)
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  uploadedBy Employee  @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
+
+  @@index([tourId])
+  @@index([customerId])
+  @@index([documentType])
+  @@index([verificationStatus])
+  @@index([expiryDate])
+}
+
+model OperationsAuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  employeeId String?
+  userEmail  String?
+  action     String
+  entity     String
+  entityId   String?
+  details    String?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([entity])
+  @@index([entityId])
+  @@index([createdAt])
+}
+
+// --- GROUP TOUR AVAILABILITY MODULE ---
+
+model GroupTour {
+  id              String   @id @default(uuid())
+  groupTourRef    String   @unique
+  packageId       String?
+  title           String
+  destination     String
+  startDate       DateTime
+  endDate         DateTime
+  pricePerPerson  Decimal  @default(0.00) @db.Decimal(12, 2)
+  totalSlots      Int      @default(10)
+  bookingDeadline DateTime
+  description     String?
+  imageUrl        String?
+  status          String   @default("Open") // Open, Almost Full, Full, Completed, Cancelled
+  createdById     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  package   TravelPackage?     @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  createdBy Employee?          @relation("GroupTourCreatedBy", fields: [createdById], references: [id])
+  bookings  GroupTourBooking[]
+  pricing   PackagePricing[]
+
+  @@index([startDate])
+  @@index([status])
+  @@index([packageId])
+}
+
+model GroupTourBooking {
+  id             String   @id @default(uuid())
+  groupTourId    String
+  customerId     String?
+  enquiryId      String?
+  customerName   String
+  customerEmail  String
+  customerPhone  String
+  numberOfPeople Int      @default(1)
+  notes          String?
+  status         String   @default("CONFIRMED") // CONFIRMED, CANCELLED, PENDING
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  groupTour GroupTour @relation(fields: [groupTourId], references: [id], onDelete: Cascade)
+  customer  Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  enquiry   Enquiry?  @relation(fields: [enquiryId], references: [id], onDelete: SetNull)
+
+  @@index([groupTourId])
+  @@index([customerId])
+}
+
+// --- RBAC & SECURITY AUDIT SYSTEM ---
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  userId        String?
+  userEmail     String?
+  userRole      String?
+  action        String
+  module        String
+  recordId      String?
+  previousValue String?  @db.Text
+  newValue      String?  @db.Text
+  ipAddress     String?
+  userAgent     String?
+  status        String   @default("SUCCESS")
+  details       String?  @db.Text
+  createdAt     DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([module])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model LoginActivity {
+  id        String   @id @default(uuid())
+  userId    String?
+  email     String
+  status    String
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([email])
+  @@index([createdAt])
+}
+
+model SecuritySettings {
+  id                  String   @id @default("default")
+  passwordMinLength   Int      @default(8)
+  requireUppercase    Boolean  @default(true)
+  requireLowercase    Boolean  @default(true)
+  requireNumbers      Boolean  @default(true)
+  requireSpecialChars Boolean  @default(true)
+  sessionTimeoutMins  Int      @default(120)
+  maxLoginAttempts    Int      @default(5)
+  lockoutDurationMins Int      @default(15)
+  auditLoggingEnabled Boolean  @default(true)
+  maxFileUploadMb     Int      @default(10)
+  allowedFileTypes    String   @default("pdf,doc,docx,jpg,jpeg,png,webp,csv,xlsx")
+  updatedAt           DateTime @updatedAt
+}
+
+model SystemSettings {
+  id                   String   @id @default("default")
+  companyName          String   @default("UTC Travel & Tourism")
+  supportEmail         String   @default("support@utctravel.com")
+  supportPhone         String   @default("+1 (800) 555-UTC1")
+  whatsappNumber       String?
+  currency             String   @default("USD")
+  timezone             String   @default("UTC+03:00")
+  notificationsEnabled Boolean  @default(true)
+  autoAssignEnquiries  Boolean  @default(true)
+  officeStartTime      String   @default("09:30")
+  officeEndTime        String   @default("18:30")
+  breakStartTime       String?  @default("13:00")
+  breakEndTime         String?  @default("14:00")
+  gracePeriodMins      Int      @default(15)
+  workingDays          String   @default("1,2,3,4,5")
+  halfDayHours         Float    @default(4.5)
+  fullDayMinHours      Float    @default(8.0)
+  overtimeMinHours     Float    @default(9.5)
+  updatedAt            DateTime @updatedAt
+}
+
+model ContactEnquiry {
+  id        String   @id @default(uuid())
+  name      String
+  email     String
+  phone     String?
+  subject   String
+  message   String   @db.Text
+  status    String   @default("NEW")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TourPricingTier {
+  id               String   @id
+  tierId           String   @unique
+  tierName         String
+  basePrice        Float    @default(0)
+  adultPrice       Float    @default(0)
+  child6to17       Float    @default(0)
+  child2to5        Float    @default(0)
+  infantPrice      Float    @default(0)
+  singleSupplement Float    @default(0)
+  updatedAt        DateTime @updatedAt
+}
+
+model FooterContent {
+  id               String   @id @default("default")
+  companyBio       String   @default("We craft unforgettable journeys with exceptional experiences at every step. From luxury customized escapes to guided group departures across Sri Lanka and global destinations.")
+  logoText         String   @default("UTC")
+  logoSubtext      String   @default("Ultimate Travel Companion")
+  address          String?
+  supportPhone     String?
+  whatsappNumber   String?
+  supportEmail     String?
+  facebookUrl      String?
+  instagramUrl     String?
+  youtubeUrl       String?
+  twitterUrl       String?
+  linkedinUrl      String?
+  copyrightText    String   @default("© 2026 Ultimate Travel Companion (UTC). All rights reserved.")
+  navColumns       Json?    
+  updatedAt        DateTime @updatedAt
+}
+
+model PackagesPageContent {
+  id               String   @id @default("default")
+  heroTitle        String   @default("Our Curated Packages")
+  heroSubtitle     String   @default("Explore our exclusive travel packages and find your next adventure.")
+  heroImage        String   @default("https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?q=80&w=1600")
+  heroActive       Boolean  @default(true)
+  dynamicSections  Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model EmployeeAttendance {
+  id           String    @id @default(uuid())
+  employeeId   String
+  date         DateTime  @db.Date
+  status       String    // PRESENT, ABSENT, LATE, HALF_DAY
+  checkInTime  DateTime?
+  checkOutTime DateTime?
+  workingHours Float?
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, date])
+  @@index([employeeId])
+  @@index([date])
+  @@index([status])
+}
+
+model EmployeeTarget {
+  id              String   @id @default(uuid())
+  employeeId      String
+  month           Int      // 1 - 12
+  year            Int      // e.g. 2026
+  targetType      String   // SALES_REVENUE, BOOKINGS_COUNT, LEADS_CONVERTED, TASKS_COMPLETED
+  targetValue     Float
+  achievedValue   Float?   @default(0)
+  unit            String   @default("COUNT") // COUNT, CURRENCY
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, month, year, targetType])
+  @@index([employeeId])
+  @@index([month, year])
+}
+
+model LeaveRequest {
+  id           String    @id @default(uuid())
+  employeeId   String
+  leaveType    String    // CASUAL, SICK, EARNED, UNPAID, OTHER
+  startDate    DateTime  @db.Date
+  endDate      DateTime  @db.Date
+  daysCount    Float
+  reason       String
+  status       String    @default("PENDING") // PENDING, APPROVED, REJECTED, CANCELLED
+  actionById   String?
+  actionAt     DateTime?
+  actionNotes  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([status])
+  @@index([startDate, endDate])
+}
+
+model EmployeeLeaveBalance {
+  id           String   @id @default(uuid())
+  employeeId   String
+  year         Int      // e.g. 2026
+  leaveType    String   // CASUAL, SICK, EARNED
+  totalDays    Float    // allocated days per year (e.g. 12 Casual, 10 Sick, 15 Earned)
+  usedDays     Float    @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, year, leaveType])
+  @@index([employeeId])
+  @@index([year])
+}
+

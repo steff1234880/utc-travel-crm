@@ -1,0 +1,1 @@
+const { PrismaClient } = require('@prisma/client'); const prisma = new PrismaClient(); async function main() { const q = await prisma.quotation.findFirst({ where: { basePrice: 3000 } }); console.log(q); } main().catch(console.error).finally(() => prisma.$disconnect());

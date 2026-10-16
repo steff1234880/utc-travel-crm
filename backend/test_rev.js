@@ -1,0 +1,1 @@
+const { PrismaClient } = require('@prisma/client'); const prisma = new PrismaClient(); async function main() { const agg = await prisma.financialTransaction.aggregate({ _sum: { amount: true }, where: { type: 'INCOME', status: 'COMPLETED' } }); console.log('Total:', agg._sum.amount); } main().catch(console.error).finally(() => prisma.$disconnect());
