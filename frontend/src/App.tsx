@@ -181,12 +181,15 @@ function App() {
 
             {/* Public Standalone Routes */}
             <Route path="/login" element={<Login />} />
+            <Route path="/admin/login" element={<Navigate to="/login" replace />} />
+            <Route path="/crm/login" element={<Navigate to="/login" replace />} />
             <Route path="/setup-admin" element={<AdminSetup />} />
             <Route path="/quote/:id" element={<QuotationReview />} />
 
             {/* Admin Routes — top-level auth guard: any unauthenticated direct URL → /login */}
             <Route path="/admin" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
               <Route index element={<AdminIndexRedirect />} />
+              <Route path="login" element={<Navigate to="/login" replace />} />
               <Route path="dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
               <Route path="ceo-dashboard" element={<ProtectedRoute requiredRole={['CEO / Super Admin', 'SUPER_ADMIN', 'Admin']}><CEODashboard /></ProtectedRoute>} />
               
