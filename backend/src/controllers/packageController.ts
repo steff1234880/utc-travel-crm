@@ -26,22 +26,42 @@ export const getPackages = async (req: Request, res: Response) => {
       ];
     }
 
-    const packages = await prisma.travelPackage.findMany({
-      where,
-      include: {
-        destination: true,
-        category: true,
-        images: true,
-        highlights: true,
-        pricingVars: true,
-      },
-      orderBy: { createdAt: 'desc' }
-    });
+    try {
+      const packages = await prisma.travelPackage.findMany({
+        where,
+        include: {
+          destination: true,
+          category: true,
+          images: true,
+          highlights: true,
+          topHighlights: true,
+          pricingVars: true,
+        },
+        orderBy: { createdAt: 'desc' }
+      });
 
-    res.status(200).json({ success: true, data: packages });
-  } catch (error) {
+      return res.status(200).json({ success: true, data: packages });
+    } catch (queryError: any) {
+      console.warn('Full relation query failed, attempting core package relation fallback:', queryError?.message || queryError);
+      const fallbackPackages = await prisma.travelPackage.findMany({
+        where,
+        include: {
+          destination: true,
+          images: true,
+          pricingVars: true,
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+
+      return res.status(200).json({ success: true, data: fallbackPackages });
+    }
+  } catch (error: any) {
     console.error('Get packages error:', error);
-    res.status(500).json({ success: false, message: 'Failed to fetch packages' });
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch packages',
+      error: error?.message || 'Database query error'
+    });
   }
 };
 

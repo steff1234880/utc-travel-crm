@@ -1,6 +1,8 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes';
 import blogRoutes from './routes/blogRoutes';
 import contactRoutes from './routes/contactRoutes';
@@ -39,8 +41,6 @@ import { seedRbac } from './utils/rbacSeeder';
 
 import path from 'path';
 
-dotenv.config();
-
 const app = express();
 
 // Serve uploaded media files securely
@@ -51,7 +51,6 @@ app.use(cors({
   origin: true,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
 app.use(express.json());
@@ -64,6 +63,7 @@ app.use('/api/enquiries', enquiryRoutes);
 app.use('/api/hr', hrRoutes);
 app.use('/api/hr/payroll', payrollRoutes);
 app.use('/api/packages', packageRoutes);
+app.use('/packages', packageRoutes); // Route alias for public / direct frontend calls
 app.use('/api/settings', settingsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/crm/sales', salesRoutes);

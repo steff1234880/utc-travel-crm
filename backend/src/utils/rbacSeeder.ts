@@ -53,38 +53,58 @@ export const seedRbac = async () => {
   try {
     console.log('🔄 Initializing RBAC System permissions and roles...');
 
-    // 1. Seed Permissions
-    const createdPermissions: Record<string, string> = {};
+    // Pre-flight check: verify Permission table exists before proceeding
+    let existingPerms: Array<{ id: string; name: string }> = [];
+    try {
+      existingPerms = await prisma.permission.findMany({
+        select: { id: true, name: true }
+      });
+    } catch (dbErr: any) {
+      if (dbErr?.code === 'P2021' || dbErr?.message?.includes('does not exist')) {
+        console.warn('⚠️ RBAC table "Permission" does not exist in the database yet. Skipping RBAC seeding until database tables are created.');
+        return;
+      }
+      throw dbErr;
+    }
+
+    // 1. Seed Permissions (idempotent & batch-checked)
+    const permMap = new Map<string, string>(existingPerms.map(p => [p.name, p.id]));
+    const missingPermissions: Array<{ name: string; module: string; action: string; description: string }> = [];
 
     for (const moduleName of MODULES) {
       for (const action of ACTIONS) {
         const permName = `${moduleName.toLowerCase().replace(/\s+/g, '_')}:${action.toLowerCase()}`;
-        const description = `Allows ${action.toLowerCase()} action in ${moduleName} module`;
-
-        const permission = await prisma.permission.upsert({
-          where: { name: permName },
-          update: { module: moduleName, action, description },
-          create: {
+        if (!permMap.has(permName)) {
+          missingPermissions.push({
             name: permName,
             module: moduleName,
             action,
-            description
-          }
-        });
-        createdPermissions[permName] = permission.id;
+            description: `Allows ${action.toLowerCase()} action in ${moduleName} module`
+          });
+        }
       }
     }
 
-    const allPermIds = Object.values(createdPermissions);
+    if (missingPermissions.length > 0) {
+      console.log(`🌱 Seeding ${missingPermissions.length} new system permissions...`);
+      for (const p of missingPermissions) {
+        const created = await prisma.permission.create({ data: p });
+        permMap.set(p.name, created.id);
+      }
+    }
+
+    const allPermIds = Array.from(permMap.values());
 
     // Helper to filter permission IDs by module or pattern
     const getPermIdsByModules = (moduleNames: string[]) => {
-      return Object.entries(createdPermissions)
-        .filter(([name]) => {
-          const mod = name.split(':')[0];
-          return moduleNames.some(m => m.toLowerCase().replace(/\s+/g, '_') === mod);
-        })
-        .map(([_, id]) => id);
+      const result: string[] = [];
+      for (const [name, id] of permMap.entries()) {
+        const mod = name.split(':')[0];
+        if (moduleNames.some(m => m.toLowerCase().replace(/\s+/g, '_') === mod)) {
+          result.push(id);
+        }
+      }
+      return result;
     };
 
     // 2. Define Role-Permission Mappings
@@ -148,24 +168,32 @@ export const seedRbac = async () => {
     }
 
     // 4. Ensure SecuritySettings default record exists
-    await prisma.securitySettings.upsert({
-      where: { id: 'default' },
-      update: {},
-      create: {
-        id: 'default',
-        passwordMinLength: 8,
-        requireUppercase: true,
-        requireLowercase: true,
-        requireNumbers: true,
-        requireSpecialChars: true,
-        sessionTimeoutMins: 120,
-        maxLoginAttempts: 5,
-        lockoutDurationMins: 15,
-        auditLoggingEnabled: true,
-        maxFileUploadMb: 10,
-        allowedFileTypes: 'pdf,doc,docx,jpg,jpeg,png,webp,csv,xlsx'
+    try {
+      const existingSettings = await prisma.securitySettings.findUnique({
+        where: { id: 'default' }
+      });
+
+      if (!existingSettings) {
+        await prisma.securitySettings.create({
+          data: {
+            id: 'default',
+            passwordMinLength: 8,
+            requireUppercase: true,
+            requireLowercase: true,
+            requireNumbers: true,
+            requireSpecialChars: true,
+            sessionTimeoutMins: 120,
+            maxLoginAttempts: 5,
+            lockoutDurationMins: 15,
+            auditLoggingEnabled: true,
+            maxFileUploadMb: 10,
+            allowedFileTypes: 'pdf,doc,docx,jpg,jpeg,png,webp,csv,xlsx'
+          }
+        });
       }
-    });
+    } catch (secErr: any) {
+      console.warn('⚠️ Could not verify default SecuritySettings:', secErr?.message);
+    }
 
     console.log('✅ RBAC System Permissions and Roles initialized successfully.');
   } catch (error) {

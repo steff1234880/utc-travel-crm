@@ -28,3 +28,4 @@ COPY --from=builder /app/prisma ./prisma
 EXPOSE 5000
 
 CMD ["npm", "start"]
+
