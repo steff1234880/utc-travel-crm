@@ -1,7 +1,9 @@
 import { defineConfig, Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+// @ts-ignore
 import fs from 'node:fs'
+// @ts-ignore
 import path from 'node:path'
 
 function spaFallbackPlugin(): Plugin {
