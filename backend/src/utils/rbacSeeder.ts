@@ -134,35 +134,49 @@ export const seedRbac = async () => {
       ])
     };
 
-    // 3. Upsert Roles and Connect Permissions
+    // 3. Upsert Roles and Connect Permissions (idempotent and fast)
+    const existingRoles = await prisma.role.findMany({
+      include: {
+        _count: { select: { permissions: true } }
+      }
+    });
+    const roleMap = new Map(existingRoles.map(r => [r.name, r]));
+
     for (const roleName of DEFAULT_ROLES) {
       const isSuperAdmin = roleName === 'CEO / Super Admin' || roleName === 'Admin';
       const rolePermIds = rolePermissionMap[roleName] || [];
+      const existingRole = roleMap.get(roleName);
 
-      const role = await prisma.role.upsert({
-        where: { name: roleName },
-        update: {
-          description: `Standard system role for ${roleName}`,
-          isSystem: isSuperAdmin,
-          permissions: {
-            set: rolePermIds.map(id => ({ id }))
+      let roleId = existingRole?.id;
+
+      if (!existingRole) {
+        const createdRole = await prisma.role.create({
+          data: {
+            name: roleName,
+            description: `Standard system role for ${roleName}`,
+            isSystem: isSuperAdmin,
+            permissions: {
+              connect: rolePermIds.map(id => ({ id }))
+            }
           }
-        },
-        create: {
-          name: roleName,
-          description: `Standard system role for ${roleName}`,
-          isSystem: isSuperAdmin,
-          permissions: {
-            connect: rolePermIds.map(id => ({ id }))
+        });
+        roleId = createdRole.id;
+      } else if (existingRole._count.permissions === 0 && rolePermIds.length > 0) {
+        await prisma.role.update({
+          where: { id: existingRole.id },
+          data: {
+            permissions: {
+              connect: rolePermIds.map(id => ({ id }))
+            }
           }
-        }
-      });
+        });
+      }
 
       // Auto-assign CEO / Super Admin role to users without a role
-      if (roleName === 'CEO / Super Admin') {
+      if (roleName === 'CEO / Super Admin' && roleId) {
         await prisma.user.updateMany({
           where: { roleId: null },
-          data: { roleId: role.id }
+          data: { roleId }
         });
       }
     }

@@ -93,20 +93,42 @@ app.use('/api/permissions', permissionRoutes);
 app.use('/api/audit-logs', auditRoutes);
 app.use('/api/security', securityRoutes);
 
-app.get('/api/health', (req, res) => {
+// Health check endpoints (support /, /health, and /api/health for Render)
+app.get(['/', '/health', '/api/health'], (req, res) => {
   res.status(200).json({ 
     status: 'ok', 
-    message: 'UTC Travel API is running with RBAC & Security Module',
-    timestamp: new Date().toISOString(),
-    db: 'postgresql@localhost:5432/utc_travel'
+    service: 'UTC Travel API',
+    timestamp: new Date().toISOString()
   });
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = Number(process.env.PORT) || 5000;
+const HOST = '0.0.0.0';
 
-app.listen(PORT, async () => {
-  console.log(`✅ UTC Travel API running on http://localhost:${PORT}`);
-  console.log(`📋 Health check: http://localhost:${PORT}/api/health`);
-  // Seed/ensure RBAC permissions & default roles exist
-  await seedRbac();
+const server = app.listen(PORT, HOST, () => {
+  console.log(`✅ UTC Travel API running on http://${HOST}:${PORT}`);
+  console.log(`📋 Health check: http://${HOST}:${PORT}/health`);
+  
+  // Seed/ensure RBAC permissions & default roles exist (runs in background so health check responds instantly)
+  seedRbac().catch((err) => {
+    console.warn('⚠️ Background RBAC seeding warning:', err?.message || err);
+  });
 });
+
+// Graceful shutdown handling for container environments (Render/Docker)
+process.on('SIGTERM', () => {
+  console.log('Received SIGTERM signal, shutting down HTTP server gracefully...');
+  server.close(() => {
+    console.log('HTTP server closed successfully.');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('Received SIGINT signal, shutting down HTTP server gracefully...');
+  server.close(() => {
+    console.log('HTTP server closed successfully.');
+    process.exit(0);
+  });
+});
+
