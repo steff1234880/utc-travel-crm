@@ -81,7 +81,10 @@ export default function UserManagement() {
     }
 
     try {
-      const res = await api.post('/users', formData);
+      const res = await api.post('/users', {
+        ...formData,
+        email: formData.email.trim().toLowerCase()
+      });
       if (res.data.success) {
         setActionSuccess('User account created successfully');
         setIsCreateModalOpen(false);
@@ -100,7 +103,7 @@ export default function UserManagement() {
     setActionSuccess(null);
     try {
       const res = await api.patch(`/users/${selectedUser.id}`, {
-        email: formData.email,
+        email: formData.email.trim().toLowerCase(),
         roleId: formData.roleId
       });
       if (res.data.success) {

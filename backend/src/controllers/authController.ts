@@ -11,9 +11,16 @@ export const login = async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Email and password are required' });
   }
 
+  const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+  const trimmedPassword = typeof password === 'string' ? password : '';
+
+  if (!normalizedEmail || !trimmedPassword) {
+    return res.status(400).json({ error: 'Email and password are required' });
+  }
+
   try {
     const user = await prisma.user.findUnique({
-      where: { email },
+      where: { email: normalizedEmail },
       include: {
         role: {
           include: {
@@ -25,22 +32,22 @@ export const login = async (req: Request, res: Response) => {
     });
 
     if (!user) {
-      await logLoginActivity({ email, status: 'FAILED_USER_NOT_FOUND', req });
-      await logAudit({ req, action: 'FAILED_LOGIN', module: 'Auth', userEmail: email, status: 'FAILURE', details: 'User not found' });
+      await logLoginActivity({ email: normalizedEmail, status: 'FAILED_USER_NOT_FOUND', req });
+      await logAudit({ req, action: 'FAILED_LOGIN', module: 'Auth', userEmail: normalizedEmail, status: 'FAILURE', details: 'User not found' });
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    const isValidPassword = await comparePassword(password, user.passwordHash);
+    const isValidPassword = await comparePassword(trimmedPassword, user.passwordHash);
 
     if (!isValidPassword) {
-      await logLoginActivity({ userId: user.id, email, status: 'FAILED_INVALID_PASSWORD', req });
-      await logAudit({ req, userId: user.id, userEmail: email, action: 'FAILED_LOGIN', module: 'Auth', status: 'FAILURE', details: 'Invalid password' });
+      await logLoginActivity({ userId: user.id, email: normalizedEmail, status: 'FAILED_INVALID_PASSWORD', req });
+      await logAudit({ req, userId: user.id, userEmail: normalizedEmail, action: 'FAILED_LOGIN', module: 'Auth', status: 'FAILURE', details: 'Invalid password' });
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
     if (!user.isActive) {
-      await logLoginActivity({ userId: user.id, email, status: 'FAILED_DEACTIVATED', req });
-      await logAudit({ req, userId: user.id, userEmail: email, action: 'FAILED_LOGIN', module: 'Auth', status: 'FORBIDDEN', details: 'Account is deactivated' });
+      await logLoginActivity({ userId: user.id, email: normalizedEmail, status: 'FAILED_DEACTIVATED', req });
+      await logAudit({ req, userId: user.id, userEmail: normalizedEmail, action: 'FAILED_LOGIN', module: 'Auth', status: 'FORBIDDEN', details: 'Account is deactivated' });
       return res.status(403).json({ error: 'Account is deactivated. Please contact your administrator.' });
     }
 
@@ -236,12 +243,38 @@ export const setupAdmin = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Full name, email, and password are required' });
     }
 
+    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    const trimmedFullName = typeof fullName === 'string' ? fullName.trim() : '';
+
+    if (!normalizedEmail || !trimmedFullName) {
+      return res.status(400).json({ error: 'Full name, email, and password are required' });
+    }
+
     if (confirmPassword && password !== confirmPassword) {
       return res.status(400).json({ error: 'Password confirmation does not match' });
     }
 
+    // Guard: Initial administrator setup is only allowed if no active administrator exists yet.
+    // If an administrator account already exists, block public admin creation.
+    const existingAdminCount = await prisma.user.count({
+      where: {
+        isActive: true,
+        role: {
+          name: {
+            in: ['Admin', 'ADMIN', 'CEO / Super Admin']
+          }
+        }
+      }
+    });
+
+    if (existingAdminCount > 0) {
+      return res.status(403).json({
+        error: 'Initial administrator setup has already been completed. Please log in using existing administrator credentials or contact your system administrator.'
+      });
+    }
+
     // Check duplicate email
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+    const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (existingUser) {
       return res.status(400).json({ error: 'A user account with this email address already exists' });
     }
@@ -293,7 +326,7 @@ export const setupAdmin = async (req: Request, res: Response) => {
     // Create User in PostgreSQL DB
     const user = await prisma.user.create({
       data: {
-        email,
+        email: normalizedEmail,
         passwordHash,
         roleId: role.id,
         isActive: true
@@ -301,7 +334,7 @@ export const setupAdmin = async (req: Request, res: Response) => {
     });
 
     // Create linked Employee record
-    const nameParts = fullName.trim().split(' ');
+    const nameParts = trimmedFullName.split(' ');
     const firstName = nameParts[0] || 'Admin';
     const lastName = nameParts.slice(1).join(' ') || 'User';
 

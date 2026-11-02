@@ -37,6 +37,7 @@ import FooterManagement from './pages/admin/website/FooterManagement';
 import PayrollManagement from './pages/admin/hr/PayrollManagement';
 
 import SalesDashboard from './pages/admin/crm/SalesDashboard';
+import MetaAnalytics from './pages/admin/crm/MetaAnalytics';
 import LeadKanbanBoard from './pages/admin/crm/LeadKanbanBoard';
 import LeadDetails from './pages/admin/crm/LeadDetails';
 import CustomerManagement from './pages/admin/crm/CustomerManagement';
@@ -216,6 +217,7 @@ function App() {
 
               {/* Sales CRM */}
               <Route path="crm/dashboard" element={<ProtectedRoute requiredModule="Sales CRM"><SalesDashboard /></ProtectedRoute>} />
+              <Route path="crm/meta-analytics" element={<ProtectedRoute requiredModule="Sales CRM"><MetaAnalytics /></ProtectedRoute>} />
               <Route path="crm/pipeline" element={<ProtectedRoute requiredModule="Sales CRM"><LeadKanbanBoard /></ProtectedRoute>} />
               <Route path="crm/leads/:id" element={<ProtectedRoute requiredModule="Sales CRM"><LeadDetails /></ProtectedRoute>} />
               <Route path="crm/leads/:id/quote" element={<ProtectedRoute requiredModule="Quotations"><QuotationBuilder /></ProtectedRoute>} />

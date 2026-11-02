@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Environment files & Secrets
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
+
+# Production Builds
+dist/
+build/
+backend/dist/
+frontend/dist/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+# Database & local sqlite/pg data
+pgdata/
+*.sqlite
+*.sqlite3
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+

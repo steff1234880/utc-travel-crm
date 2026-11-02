@@ -33,9 +33,10 @@ export default function AdminSetup() {
     setLoading(true);
 
     try {
+      const cleanEmail = email.trim().toLowerCase();
       const res = await api.post('/auth/setup-admin', {
-        fullName,
-        email,
+        fullName: fullName.trim(),
+        email: cleanEmail,
         password,
         confirmPassword
       });
@@ -84,9 +85,20 @@ export default function AdminSetup() {
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-xs text-red-300 flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                <div>{error}</div>
+              <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-xs text-red-300 space-y-2">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                  <div className="leading-relaxed">{error}</div>
+                </div>
+                {error.includes('already been completed') && (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/login')}
+                    className="w-full mt-2 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-lg transition-all flex items-center justify-center gap-1.5"
+                  >
+                    Go to Login Page <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             )}
 

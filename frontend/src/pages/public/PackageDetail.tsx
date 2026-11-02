@@ -33,6 +33,7 @@ import {
 import api from '../../services/api';
 import EnquiryModal from '../../components/EnquiryModal';
 import WhatsAppEnquiryButton from '../../components/WhatsAppEnquiryButton';
+import { trackMetaEvent } from '../../utils/metaPixel';
 interface ItineraryActivity {
   id: string;
   time?: string | null;
@@ -110,6 +111,7 @@ export default function PackageDetail() {
     window.scrollTo(0, 0);
   }, [slug]);
 
+  // Track Meta ViewContent when package loads
   const { data: pkgData, isLoading, isError } = useQuery<{ data: PackageDetailData }>({
     queryKey: ['package-detail', slug],
     queryFn: async () => {
@@ -118,6 +120,19 @@ export default function PackageDetail() {
     },
     enabled: !!slug
   });
+
+useEffect(() => {
+    if (pkgData?.data) {
+      trackMetaEvent('ViewContent', {
+        contentName: pkgData.data.title,
+        contentCategory: 'Travel Package',
+        contentIds: [pkgData.data.id],
+        value: pkgData.data.basePrice,
+        currency: pkgData.data.currency || 'USD',
+      });
+    }
+  }, [pkgData?.data?.id]);
+
 
   const { data: homeContent } = useQuery({
     queryKey: ['homepage-content'],

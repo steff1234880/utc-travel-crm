@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { X, CheckCircle, AlertCircle, Sparkles, User, Calendar, CreditCard, ShieldCheck, MapPin, ArrowRight, Users } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../services/api';
+import { trackMetaEvent } from '../utils/metaPixel';
 
 // ─── GROUP TOUR schema ────────────────────────────────────────────────────────
 const groupEnquirySchema = z.object({
@@ -110,6 +111,20 @@ function CustomTourForm({ onClose }: { onClose: () => void }) {
       };
       const response = await api.post('/enquiries/submit', payload);
       setReferenceNumber(response.data.referenceNumber || '');
+
+      // Track Meta Lead event (Browser Pixel & Server CAPI deduplicated)
+      trackMetaEvent('Lead', {
+        destination: data.destination,
+        numTravelers: totalTravellers,
+        contentCategory: 'Custom Tour Enquiry',
+        referenceNumber: response.data.referenceNumber,
+      }, {
+        email: data.email,
+        phone: data.phone,
+        firstName: data.firstName,
+        lastName: data.lastName,
+      });
+
       setStatus('success');
     } catch (error: unknown) {
       const err = error as { response?: { data?: { message?: string; errors?: { message: string }[] } } };
@@ -394,6 +409,23 @@ export default function EnquiryModal({
 
       const response = await api.post('/enquiries/submit', payload);
       setReferenceNumber(response.data.referenceNumber);
+
+      // Track Meta Lead event (Browser Pixel & Server CAPI deduplicated)
+      trackMetaEvent('Lead', {
+        packageId: selectedPkgId,
+        packageName: displayPackageName,
+        numTravelers: adultCount + child6to17Count + child2to5Count + infantCount,
+        value: calculatedTotalAmount,
+        currency: 'USD',
+        contentCategory: 'Package Tour Booking',
+        referenceNumber: response.data.referenceNumber,
+      }, {
+        email: data.email,
+        phone: data.phone,
+        firstName: data.firstName,
+        lastName: data.lastName,
+      });
+
       setStatus('success');
     } catch (error: unknown) {
       const err = error as { response?: { data?: { message?: string; errors?: { message: string }[] } } };

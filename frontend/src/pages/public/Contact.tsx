@@ -5,6 +5,7 @@ import { MapPin, Phone, Mail, Clock } from 'lucide-react';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../services/api';
+import { trackMetaEvent } from '../../utils/metaPixel';
 
 const contactSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -39,6 +40,18 @@ export default function Contact() {
     setSubmitStatus('submitting');
     try {
       await api.post('/contact', data);
+      
+      // Track Contact Event to Meta Pixel & Conversions API
+      trackMetaEvent('Contact', {
+        subject: data.subject,
+        contentName: 'Contact Us Inquiry',
+      }, {
+        email: data.email,
+        phone: data.phone,
+        firstName: data.name.split(' ')[0],
+        lastName: data.name.split(' ').slice(1).join(' '),
+      });
+
       setSubmitStatus('success');
       reset();
     } catch (error) {

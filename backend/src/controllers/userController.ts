@@ -150,8 +150,9 @@ export const getUserById = async (req: Request, res: Response) => {
 export const createUser = async (req: Request, res: Response) => {
   try {
     const { email, password, roleId, firstName, lastName } = createUserSchema.parse(req.body);
+    const normalizedEmail = email.trim().toLowerCase();
 
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+    const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (existingUser) {
       return res.status(400).json({ error: 'User with this email already exists' });
     }
@@ -165,7 +166,7 @@ export const createUser = async (req: Request, res: Response) => {
 
     const user = await prisma.user.create({
       data: {
-        email,
+        email: normalizedEmail,
         passwordHash,
         roleId: roleId || null,
         isActive: true
@@ -225,7 +226,17 @@ export const updateUser = async (req: Request, res: Response) => {
     }
 
     const updateData: any = {};
-    if (email && email !== existingUser.email) updateData.email = email;
+    if (email && typeof email === 'string') {
+      const normalizedEmail = email.trim().toLowerCase();
+      if (normalizedEmail !== existingUser.email) {
+        // Check uniqueness
+        const duplicate = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+        if (duplicate && duplicate.id !== id) {
+          return res.status(400).json({ error: 'A user with this email address already exists' });
+        }
+        updateData.email = normalizedEmail;
+      }
+    }
     if (roleId !== undefined) updateData.roleId = roleId;
     if (isActive !== undefined) updateData.isActive = Boolean(isActive);
 

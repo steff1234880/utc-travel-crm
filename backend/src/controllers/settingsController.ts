@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
 import { z } from 'zod';
+import { comparePassword, hashPassword, validatePasswordStrength } from '../utils/password.utils';
 
 const updateProfileSchema = z.object({
   firstName: z.string().min(1, 'First name is required').optional(),
@@ -112,13 +113,21 @@ export const changePassword = async (req: Request, res: Response) => {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-    if (user.passwordHash !== currentPassword) {
+    const isMatch = await comparePassword(currentPassword, user.passwordHash);
+    if (!isMatch) {
       return res.status(400).json({ success: false, message: 'Current password is incorrect' });
     }
 
+    const validation = await validatePasswordStrength(newPassword);
+    if (!validation.isValid) {
+      return res.status(400).json({ success: false, message: validation.message });
+    }
+
+    const passwordHash = await hashPassword(newPassword);
+
     await prisma.user.update({
       where: { id: userId },
-      data: { passwordHash: newPassword }
+      data: { passwordHash }
     });
 
     res.status(200).json({ success: true, message: 'Password changed successfully' });
