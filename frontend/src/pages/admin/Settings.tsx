@@ -17,9 +17,11 @@ import {
   Trash2,
   Plus,
   Plane,
-  Clock
+  Clock,
+  Share2
 } from 'lucide-react';
 import GlobalLoadingAnimation from '../../components/common/GlobalLoadingAnimation';
+import MetaIntegrationTab from './settings/MetaIntegrationTab';
 
 interface DestinationItem {
   id: string;
@@ -33,7 +35,7 @@ interface DestinationItem {
 
 export default function Settings() {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'profile' | 'password' | 'system' | 'website'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'password' | 'system' | 'website' | 'meta'>('profile');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Profile Form state
@@ -432,6 +434,14 @@ export default function Settings() {
           }`}
         >
           <Building className="w-4 h-4" /> Company & System Settings
+        </button>
+        <button
+          onClick={() => { setActiveTab('meta'); setFeedback(null); }}
+          className={`pb-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${
+            activeTab === 'meta' ? 'border-blue-600 text-blue-600 font-black' : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          <Share2 className="w-4 h-4 text-blue-500" /> Meta Integration (FB, IG, WhatsApp)
         </button>
       </div>
 
@@ -1253,6 +1263,11 @@ export default function Settings() {
             </button>
           </div>
         </form>
+      )}
+
+      {/* 5. Meta Integration Tab */}
+      {activeTab === 'meta' && (
+        <MetaIntegrationTab />
       )}
 
     </div>

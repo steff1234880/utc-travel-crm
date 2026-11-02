@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Search } from 'lucide-react';
 import api from '../../../../services/api';
+import { trackMetaEvent } from '../../../../utils/metaPixel';
 
 interface PaymentFormProps {
   onClose: () => void;
@@ -114,6 +115,20 @@ export default function PaymentForm({ onClose, onSuccess, initialData }: Payment
       }
       
       if (res.data.success) {
+        // Track verified successful payment in Meta Pixel & CAPI
+        const selectedCust = customers.find(c => c.id === formData.customerId);
+        trackMetaEvent('Purchase', {
+          value: Number(formData.amount),
+          currency: 'USD',
+          paymentMethod: formData.paymentMethod,
+          referenceNumber: res.data?.data?.referenceNumber || undefined,
+        }, {
+          email: selectedCust?.email,
+          phone: selectedCust?.phone || selectedCust?.whatsappNumber,
+          firstName: selectedCust?.firstName,
+          lastName: selectedCust?.lastName,
+        });
+
         onSuccess();
       }
     } catch (err: any) {

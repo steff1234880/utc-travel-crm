@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { trackMetaEvent } from '../../utils/metaPixel';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -765,7 +766,13 @@ function PackagesListing() {
               type="text"
               placeholder="Search by package title or destination..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSearchTerm(val);
+                if (val.length >= 3) {
+                  trackMetaEvent('Search', { searchString: val });
+                }
+              }}
               className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm text-sm"
             />
           </div>

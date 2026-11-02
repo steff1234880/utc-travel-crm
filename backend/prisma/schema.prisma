@@ -269,6 +269,7 @@ model Customer {
   operationsDocuments   OperationsDocument[]
   groupTourBookings     GroupTourBooking[]
   FollowUp              FollowUp[]
+  metaMessages          MetaMessage[]
 }
 
 model Enquiry {
@@ -297,6 +298,7 @@ model Enquiry {
   followUps         FollowUp[]
   salesLead         SalesLead?
   groupTourBookings GroupTourBooking[]
+  metaMessages      MetaMessage[]
 
   @@index([status])
   @@index([referenceNumber])
@@ -1611,4 +1613,82 @@ model EmployeeLeaveBalance {
   @@index([employeeId])
   @@index([year])
 }
+
+// ==========================================
+// Meta Integration Models
+// ==========================================
+
+model MetaConfig {
+  id                   String    @id @default("default")
+  appId                String?
+  appSecret            String?
+  verifyToken          String?   // Webhook challenge verification token
+  pixelId              String?
+  capiAccessToken      String?   // Conversions API system user token
+  testEventCode        String?   // Meta CAPI test code (e.g. TEST12345)
+  isLive               Boolean   @default(false)
+  autoSyncLeads        Boolean   @default(true)
+  trackPixel           Boolean   @default(true)
+  trackCapi            Boolean   @default(true)
+  lastSyncAt           DateTime?
+  webhookStatus        String    @default("INACTIVE") // ACTIVE, INACTIVE, ERROR
+  webhookLastError     String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+}
+
+model MetaAccount {
+  id                   String    @id @default(uuid())
+  platform             String    // FACEBOOK, INSTAGRAM, WHATSAPP, AD_ACCOUNT
+  accountId            String    // Meta Page ID, IG User ID, WABA ID, Act ID
+  accountName          String
+  status               String    @default("DISCONNECTED") // CONNECTED, DISCONNECTED, ERROR, EXPIRED
+  accessToken          String?   // Encrypted/Stored Page Access Token or System User Token
+  tokenExpiresAt       DateTime?
+  scope                String?
+  metadata             Json?     // Extra data like phone_number_id, waba_id, username
+  lastSyncAt           DateTime?
+  errorMessage         String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@unique([platform, accountId])
+}
+
+model MetaMessage {
+  id                   String    @id @default(uuid())
+  platform             String    // WHATSAPP, MESSENGER, INSTAGRAM
+  externalId           String?   @unique // Meta message ID (wamid.xxx or mid.xxx)
+  senderId             String    // Customer WhatsApp number / Page-scoped user ID (PSID)
+  senderName           String?
+  recipientId          String    // UTC Business Number ID or Page ID
+  direction            String    // INBOUND, OUTBOUND
+  type                 String    @default("TEXT") // TEXT, TEMPLATE, IMAGE, DOCUMENT
+  content              String
+  templateName         String?
+  status               String    @default("SENT") // SENT, DELIVERED, READ, FAILED
+  errorCode            String?
+  errorMessage         String?
+  enquiryId            String?
+  customerId           String?
+  rawPayload           Json?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  enquiry              Enquiry?  @relation(fields: [enquiryId], references: [id], onDelete: SetNull)
+  customer             Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([platform, senderId])
+  @@index([enquiryId])
+  @@index([customerId])
+}
+
+model MetaProcessedEvent {
+  id                   String    @id @default(uuid())
+  eventId              String    @unique // Meta leadgen_id or webhook event ID for deduplication
+  eventType            String    // LEADGEN, MESSAGE, STATUS, CAPI
+  processedAt          DateTime  @default(now())
+  payloadSummary       String?
+}
+
 

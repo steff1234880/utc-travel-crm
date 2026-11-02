@@ -5,7 +5,8 @@ import {
   Building2, UserCircle, Wallet, Briefcase, TrendingUp, Columns, 
   UserSquare2, PieChart, CreditCard, Receipt, RefreshCcw, Compass, 
   MapPin, Building, Plane, Train, Bus, ShieldCheck, KeyRound, LogOut, Lock, MessageSquare, LayoutTemplate,
-  Menu, X, ChevronDown, ChevronRight, LayoutGrid, Download, Sparkles, MessageCircle, ArrowRight, Clock, CalendarCheck
+  Menu, X, ChevronDown, ChevronRight, LayoutGrid, Download, Sparkles, MessageCircle, ArrowRight, Clock, CalendarCheck,
+  Share2
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { NotificationsDropdown } from '../components/admin/NotificationsDropdown';
@@ -67,7 +68,8 @@ export default function AdminLayout() {
       badgeColor: 'bg-red-50 text-[#8b182b] border border-red-100',
       items: [
         { name: 'Sales CRM', path: '/admin/crm/dashboard', icon: TrendingUp, module: 'Sales CRM' },
-        { name: 'Sales Pipeline', path: '/admin/crm/pipeline', icon: Columns, module: 'Sales CRM' }
+        { name: 'Sales Pipeline', path: '/admin/crm/pipeline', icon: Columns, module: 'Sales CRM' },
+        { name: 'Meta Analytics', path: '/admin/crm/meta-analytics', icon: Share2, module: 'Sales CRM' }
       ]
     },
     {

@@ -18,8 +18,17 @@ export default function Login() {
     setLoading(true);
     setError(null);
 
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password;
+
+    if (!cleanEmail || !cleanPassword) {
+      setError('Email and password are required');
+      setLoading(false);
+      return;
+    }
+
     try {
-      const result = await login(email, password);
+      const result = await login(cleanEmail, cleanPassword);
 
       if (result.success) {
         // Determine target route — prefer role-based route, fall back to /admin

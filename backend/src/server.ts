@@ -1,6 +1,9 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+import { validateProductionEnvironment } from './utils/envSecurityValidator';
+validateProductionEnvironment();
+
 import express from 'express';
 import cors from 'cors';
 import authRoutes from './routes/authRoutes';
@@ -10,6 +13,7 @@ import enquiryRoutes from './routes/enquiryRoutes';
 import hrRoutes from './routes/hrRoutes';
 import packageRoutes from './routes/packageRoutes';
 import settingsRoutes from './routes/settingsRoutes';
+import metaRoutes from './routes/metaRoutes';
 import payrollRoutes from './routes/payrollRoutes';
 import dashboardRoutes from './routes/dashboardRoutes';
 import salesRoutes from './routes/salesRoutes';
@@ -65,6 +69,7 @@ app.use('/api/hr/payroll', payrollRoutes);
 app.use('/api/packages', packageRoutes);
 app.use('/packages', packageRoutes); // Route alias for public / direct frontend calls
 app.use('/api/settings', settingsRoutes);
+app.use('/api/meta', metaRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/crm/sales', salesRoutes);
 app.use('/api/crm/leads', leadRoutes);

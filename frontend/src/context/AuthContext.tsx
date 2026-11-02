@@ -96,7 +96,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const login = async (email: string, password: string) => {
     try {
-      const { data } = await api.post('/auth/login', { email, password });
+      const normalizedEmail = (email || '').trim().toLowerCase();
+      const trimmedPassword = password || '';
+      const { data } = await api.post('/auth/login', { email: normalizedEmail, password: trimmedPassword });
       if (data.success && data.accessToken) {
         // Clear any stale tokens before storing new credentials
         localStorage.removeItem('token');
