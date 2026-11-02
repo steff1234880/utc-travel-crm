@@ -113,7 +113,7 @@ export default function ExpenseDashboard() {
 
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
           <h3 className="text-lg font-bold text-slate-900 mb-4">Quick Actions</h3>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <button 
               onClick={() => navigate('/admin/accounting/expenses?status=SUBMITTED')}
               className="p-4 border border-slate-200 rounded-xl hover:bg-slate-50 flex flex-col items-center justify-center gap-2 text-slate-700 font-medium"

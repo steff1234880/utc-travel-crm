@@ -92,7 +92,7 @@ export default function CustomerDetail() {
 
   if (error || !customer) {
     return (
-      <div className="p-8 max-w-7xl mx-auto">
+      <div className="p-4 sm:p-8 max-w-7xl mx-auto w-full min-w-0">
         <Link to="/admin/crm/customers" className="inline-flex items-center text-sm text-gray-500 hover:text-blue-600 mb-6">
           <ArrowLeft className="w-4 h-4 mr-2" /> Back to Customers
         </Link>
@@ -112,7 +112,7 @@ export default function CustomerDetail() {
   const totalSalesLeads = customer.salesLeads?.length || 0;
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-8 max-w-7xl mx-auto w-full min-w-0">
       {/* Top Header */}
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -194,7 +194,7 @@ export default function CustomerDetail() {
       </div>
 
       {/* Quick Stats Summary */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm text-center">
           <p className="text-2xl font-bold text-blue-600">{totalEnquiries}</p>
           <p className="text-xs text-gray-500 font-medium mt-1">Enquiries</p>

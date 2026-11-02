@@ -88,7 +88,7 @@ export default function OperationsReports() {
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 w-full min-w-0 space-y-6 max-w-7xl mx-auto">
       {/* Top Banner */}
       <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 rounded-2xl shadow-lg border border-slate-800 space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -195,7 +195,7 @@ export default function OperationsReports() {
         ) : !reportData ? (
           <div className="p-16 text-center text-slate-400 text-xs">No data available for this report.</div>
         ) : (
-          <div className="p-6 space-y-4 text-xs">
+          <div className="p-4 sm:p-6 w-full min-w-0 space-y-4 text-xs">
             {/* 1. Tour Operations Report */}
             {activeReport === 'tours' && reportData.tours && (
               <div className="overflow-x-auto">

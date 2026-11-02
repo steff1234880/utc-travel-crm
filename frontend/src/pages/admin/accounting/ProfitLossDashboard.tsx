@@ -44,8 +44,8 @@ export default function ProfitLossDashboard() {
   const isProfitable = data?.profitability?.netProfit >= 0;
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-8">
-      <div className="flex justify-between items-center">
+    <div className="p-4 sm:p-8 w-full min-w-0 max-w-7xl mx-auto space-y-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Profit & Loss</h1>
           <p className="text-slate-500 mt-1">Financial performance overview</p>
@@ -106,7 +106,7 @@ export default function ProfitLossDashboard() {
           <h3 className="text-lg font-bold text-slate-900 mb-4">Revenue Breakdown</h3>
           <div className="space-y-4">
             {Object.entries(data?.revenue?.breakdown || {}).map(([key, value]: any) => (
-              <div key={key} className="flex justify-between items-center">
+              <div key={key} className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <span className="text-slate-600 font-medium capitalize">{key.replace(/_/g, ' ')}</span>
                 <span className="font-bold text-slate-900">{formatCurrency(value)}</span>
               </div>
@@ -122,7 +122,7 @@ export default function ProfitLossDashboard() {
               .sort(([,a]: any, [,b]: any) => b - a)
               .slice(0, 5)
               .map(([key, value]: any) => (
-              <div key={key} className="flex justify-between items-center">
+              <div key={key} className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <span className="text-slate-600 font-medium truncate pr-4">{key}</span>
                 <span className="font-bold text-slate-900">{formatCurrency(value)}</span>
               </div>

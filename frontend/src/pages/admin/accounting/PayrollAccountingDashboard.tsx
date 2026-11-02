@@ -249,7 +249,7 @@ export default function PayrollAccountingDashboard() {
               {/* Type */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">Type <span className="text-red-500">*</span></label>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {(['INCENTIVE', 'COMMISSION'] as const).map(t => (
                     <button
                       type="button"

@@ -678,7 +678,7 @@ export default function TourDetails() {
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 bg-white p-3 rounded-lg border border-slate-200">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-600 bg-white p-3 rounded-lg border border-slate-200">
                     <div><strong>Passenger:</strong> {t.passengerName}</div>
                     <div><strong>PNR:</strong> <span className="font-mono text-blue-700 font-bold">{t.pnr}</span></div>
                     <div><strong>Route:</strong> {t.departureAirport} → {t.arrivalAirport}</div>
@@ -735,7 +735,7 @@ export default function TourDetails() {
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 bg-white p-3 rounded-lg border border-slate-200">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-600 bg-white p-3 rounded-lg border border-slate-200">
                     <div><strong>Passenger:</strong> {t.passengerName}</div>
                     <div><strong>PNR:</strong> <span className="font-mono text-emerald-700 font-bold">{t.pnr}</span></div>
                     <div><strong>Stations:</strong> {t.departureLocation} → {t.arrivalLocation}</div>
@@ -790,7 +790,7 @@ export default function TourDetails() {
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 bg-white p-3 rounded-lg border border-slate-200">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-600 bg-white p-3 rounded-lg border border-slate-200">
                     <div><strong>Passenger:</strong> {t.passengerName}</div>
                     <div><strong>PNR:</strong> <span className="font-mono text-purple-700 font-bold">{t.pnr}</span></div>
                     <div><strong>Route:</strong> {t.departureLocation} → {t.arrivalLocation}</div>
@@ -845,7 +845,7 @@ export default function TourDetails() {
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 bg-white p-3 rounded-lg border border-slate-200">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-600 bg-white p-3 rounded-lg border border-slate-200">
                     <div><strong>Check-in:</strong> {new Date(h.checkInDate).toLocaleDateString('en-GB')}</div>
                     <div><strong>Check-out:</strong> {new Date(h.checkOutDate).toLocaleDateString('en-GB')}</div>
                     <div><strong>Room Type:</strong> {h.roomType || 'Standard'}</div>
@@ -1184,19 +1184,19 @@ export default function TourDetails() {
             </div>
             <form onSubmit={handleAddFlight} className="space-y-3 text-xs">
               <input type="text" required placeholder="Passenger Name *" value={flightForm.passengerName} onChange={(e) => setFlightForm({ ...flightForm, passengerName: e.target.value })} className="w-full p-2.5 border rounded-xl" />
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input type="text" required placeholder="Airline *" value={flightForm.airline} onChange={(e) => setFlightForm({ ...flightForm, airline: e.target.value })} className="p-2.5 border rounded-xl" />
                 <input type="text" required placeholder="Flight Number *" value={flightForm.flightNumber} onChange={(e) => setFlightForm({ ...flightForm, flightNumber: e.target.value })} className="p-2.5 border rounded-xl" />
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input type="text" required placeholder="Departure Airport *" value={flightForm.departureAirport} onChange={(e) => setFlightForm({ ...flightForm, departureAirport: e.target.value })} className="p-2.5 border rounded-xl" />
                 <input type="text" required placeholder="Arrival Airport *" value={flightForm.arrivalAirport} onChange={(e) => setFlightForm({ ...flightForm, arrivalAirport: e.target.value })} className="p-2.5 border rounded-xl" />
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input type="datetime-local" required value={flightForm.departureDateTime} onChange={(e) => setFlightForm({ ...flightForm, departureDateTime: e.target.value })} className="p-2.5 border rounded-xl" />
                 <input type="datetime-local" required value={flightForm.arrivalDateTime} onChange={(e) => setFlightForm({ ...flightForm, arrivalDateTime: e.target.value })} className="p-2.5 border rounded-xl" />
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input type="text" required placeholder="PNR *" value={flightForm.pnr} onChange={(e) => setFlightForm({ ...flightForm, pnr: e.target.value })} className="p-2.5 border rounded-xl" />
                 <input type="text" placeholder="Ticket Number" value={flightForm.ticketNumber} onChange={(e) => setFlightForm({ ...flightForm, ticketNumber: e.target.value })} className="p-2.5 border rounded-xl" />
               </div>
@@ -1216,19 +1216,19 @@ export default function TourDetails() {
             </div>
             <form onSubmit={handleAddTrain} className="space-y-3 text-xs">
               <input type="text" required placeholder="Passenger Name *" value={trainForm.passengerName} onChange={(e) => setTrainForm({ ...trainForm, passengerName: e.target.value })} className="w-full p-2.5 border rounded-xl" />
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input type="text" required placeholder="Railway Operator *" value={trainForm.operator} onChange={(e) => setTrainForm({ ...trainForm, operator: e.target.value })} className="p-2.5 border rounded-xl" />
                 <input type="text" required placeholder="Train Number *" value={trainForm.trainNumber} onChange={(e) => setTrainForm({ ...trainForm, trainNumber: e.target.value })} className="p-2.5 border rounded-xl" />
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input type="text" required placeholder="Departure Station *" value={trainForm.departureLocation} onChange={(e) => setTrainForm({ ...trainForm, departureLocation: e.target.value })} className="p-2.5 border rounded-xl" />
                 <input type="text" required placeholder="Arrival Station *" value={trainForm.arrivalLocation} onChange={(e) => setTrainForm({ ...trainForm, arrivalLocation: e.target.value })} className="p-2.5 border rounded-xl" />
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input type="datetime-local" required value={trainForm.departureDateTime} onChange={(e) => setTrainForm({ ...trainForm, departureDateTime: e.target.value })} className="p-2.5 border rounded-xl" />
                 <input type="datetime-local" required value={trainForm.arrivalDateTime} onChange={(e) => setTrainForm({ ...trainForm, arrivalDateTime: e.target.value })} className="p-2.5 border rounded-xl" />
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input type="text" required placeholder="PNR / Ref *" value={trainForm.pnr} onChange={(e) => setTrainForm({ ...trainForm, pnr: e.target.value })} className="p-2.5 border rounded-xl" />
                 <input type="text" placeholder="Seat / Berth" value={trainForm.seatNumber} onChange={(e) => setTrainForm({ ...trainForm, seatNumber: e.target.value })} className="p-2.5 border rounded-xl" />
               </div>
@@ -1248,19 +1248,19 @@ export default function TourDetails() {
             </div>
             <form onSubmit={handleAddBus} className="space-y-3 text-xs">
               <input type="text" required placeholder="Passenger Name *" value={busForm.passengerName} onChange={(e) => setBusForm({ ...busForm, passengerName: e.target.value })} className="w-full p-2.5 border rounded-xl" />
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input type="text" required placeholder="Bus Operator *" value={busForm.operator} onChange={(e) => setBusForm({ ...busForm, operator: e.target.value })} className="p-2.5 border rounded-xl" />
                 <input type="text" placeholder="Bus Number" value={busForm.busNumber} onChange={(e) => setBusForm({ ...busForm, busNumber: e.target.value })} className="p-2.5 border rounded-xl" />
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input type="text" required placeholder="Boarding Point *" value={busForm.departureLocation} onChange={(e) => setBusForm({ ...busForm, departureLocation: e.target.value })} className="p-2.5 border rounded-xl" />
                 <input type="text" required placeholder="Dropoff Point *" value={busForm.arrivalLocation} onChange={(e) => setBusForm({ ...busForm, arrivalLocation: e.target.value })} className="p-2.5 border rounded-xl" />
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input type="datetime-local" required value={busForm.departureDateTime} onChange={(e) => setBusForm({ ...busForm, departureDateTime: e.target.value })} className="p-2.5 border rounded-xl" />
                 <input type="datetime-local" required value={busForm.arrivalDateTime} onChange={(e) => setBusForm({ ...busForm, arrivalDateTime: e.target.value })} className="p-2.5 border rounded-xl" />
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input type="text" required placeholder="PNR / Ticket Ref *" value={busForm.pnr} onChange={(e) => setBusForm({ ...busForm, pnr: e.target.value })} className="p-2.5 border rounded-xl" />
                 <input type="text" placeholder="Seat Number" value={busForm.seatNumber} onChange={(e) => setBusForm({ ...busForm, seatNumber: e.target.value })} className="p-2.5 border rounded-xl" />
               </div>
@@ -1281,11 +1281,11 @@ export default function TourDetails() {
             <form onSubmit={handleAddHotel} className="space-y-3 text-xs">
               <input type="text" required placeholder="Hotel Name *" value={hotelForm.hotelName} onChange={(e) => setHotelForm({ ...hotelForm, hotelName: e.target.value })} className="w-full p-2.5 border rounded-xl" />
               <input type="text" placeholder="Destination" value={hotelForm.destination || tour.destination} onChange={(e) => setHotelForm({ ...hotelForm, destination: e.target.value })} className="w-full p-2.5 border rounded-xl" />
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input type="date" required value={hotelForm.checkInDate} onChange={(e) => setHotelForm({ ...hotelForm, checkInDate: e.target.value })} className="p-2.5 border rounded-xl" />
                 <input type="date" required value={hotelForm.checkOutDate} onChange={(e) => setHotelForm({ ...hotelForm, checkOutDate: e.target.value })} className="p-2.5 border rounded-xl" />
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input type="text" placeholder="Room Type" value={hotelForm.roomType} onChange={(e) => setHotelForm({ ...hotelForm, roomType: e.target.value })} className="p-2.5 border rounded-xl" />
                 <input type="text" placeholder="Confirmation Number" value={hotelForm.confirmationNumber} onChange={(e) => setHotelForm({ ...hotelForm, confirmationNumber: e.target.value })} className="p-2.5 border rounded-xl" />
               </div>

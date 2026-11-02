@@ -143,7 +143,7 @@ export default function OperationsDashboard() {
   };
 
   return (
-    <div className="p-6 space-y-8 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 w-full min-w-0 space-y-8 max-w-7xl mx-auto">
       {/* Page Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
@@ -443,7 +443,7 @@ export default function OperationsDashboard() {
 
         {/* Error State */}
         {error && (
-          <div className="p-6 m-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 flex items-center">
+          <div className="p-4 sm:p-6 w-full min-w-0 m-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 flex items-center">
             <AlertCircle className="w-5 h-5 mr-3 shrink-0" />
             <span>{error}</span>
           </div>

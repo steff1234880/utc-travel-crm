@@ -72,11 +72,11 @@ export default function FeedbackEnquiries() {
     }
   };
 
-  if (isLoading) return <div className="p-8 text-center text-slate-500 font-bold">Loading feedback...</div>;
-  if (isError) return <div className="p-8 text-center text-rose-500 font-bold">Failed to load feedback enquiries.</div>;
+  if (isLoading) return <div className="p-4 sm:p-8 w-full min-w-0 text-center text-slate-500 font-bold">Loading feedback...</div>;
+  if (isError) return <div className="p-4 sm:p-8 w-full min-w-0 text-center text-rose-500 font-bold">Failed to load feedback enquiries.</div>;
 
   return (
-    <div className="p-8 max-w-6xl mx-auto">
+    <div className="p-4 sm:p-8 w-full min-w-0 max-w-6xl mx-auto">
       <div className="mb-8 flex justify-between items-end">
         <div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">Feedback Enquiries</h1>
@@ -146,7 +146,7 @@ export default function FeedbackEnquiries() {
       {isModalOpen && selectedEnquiry && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
           <div className="bg-white rounded-2xl w-full max-w-2xl shadow-xl border border-slate-100 overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="flex justify-between items-center p-6 border-b border-slate-100">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 p-6 border-b border-slate-100">
               <h2 className="text-xl font-black text-slate-900">Feedback Details</h2>
               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-700 transition-colors">
                 <X className="w-6 h-6" />

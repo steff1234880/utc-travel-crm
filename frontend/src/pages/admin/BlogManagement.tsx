@@ -167,7 +167,7 @@ export default function BlogManagement() {
   const posts = postsRes?.data || [];
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-8 w-full min-w-0 max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">Blog & Articles</h1>
@@ -231,8 +231,9 @@ export default function BlogManagement() {
         </div>
 
         {isLoading ? (
-          <div className="p-8 text-center text-slate-500">Loading articles...</div>
+          <div className="p-4 sm:p-8 w-full min-w-0 text-center text-slate-500">Loading articles...</div>
         ) : (
+      <div className="overflow-x-auto w-full min-w-0">
           <table className="w-full">
             <thead className="bg-slate-50 border-b border-slate-100 text-left text-sm font-bold text-slate-500 uppercase">
               <tr>
@@ -318,6 +319,7 @@ export default function BlogManagement() {
               )}
             </tbody>
           </table>
+      </div>
         )}
       </div>
 

@@ -150,8 +150,8 @@ export default function DesignationList() {
   const departments = departmentsData?.data || [];
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
-      <div className="flex justify-between items-center mb-8">
+    <div className="p-4 sm:p-8 w-full min-w-0 max-w-7xl mx-auto">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">Designations</h1>
           <p className="text-slate-500 mt-1">Manage company roles and job designations.</p>
@@ -207,8 +207,9 @@ export default function DesignationList() {
         </div>
 
         {isLoading ? (
-          <div className="p-8 text-center text-slate-500">Loading designations...</div>
+          <div className="p-4 sm:p-8 w-full min-w-0 text-center text-slate-500">Loading designations...</div>
         ) : (
+      <div className="overflow-x-auto w-full min-w-0">
           <table className="w-full">
             <thead className="bg-slate-50 border-b border-slate-100 text-left text-sm font-bold text-slate-500 uppercase">
               <tr>
@@ -286,6 +287,7 @@ export default function DesignationList() {
               )}
             </tbody>
           </table>
+      </div>
         )}
       </div>
 

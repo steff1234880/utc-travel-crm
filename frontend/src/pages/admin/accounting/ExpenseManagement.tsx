@@ -88,8 +88,8 @@ export default function ExpenseManagement() {
   };
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
-      <div className="flex justify-between items-center mb-8">
+    <div className="p-4 sm:p-8 w-full min-w-0 max-w-7xl mx-auto">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Expenses</h1>
           <p className="text-slate-500 mt-1">Manage vendor payments, overheads, and reimbursements</p>
@@ -208,7 +208,7 @@ export default function ExpenseManagement() {
                   </tr>
                 ))}
                 {expenses.length === 0 && (
-                  <tr><td colSpan={7} className="p-8 text-center text-slate-500">No expenses found matching the filters</td></tr>
+                  <tr><td colSpan={7} className="p-4 sm:p-8 w-full min-w-0 text-center text-slate-500">No expenses found matching the filters</td></tr>
                 )}
               </tbody>
             </table>

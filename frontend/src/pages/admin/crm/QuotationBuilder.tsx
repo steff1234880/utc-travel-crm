@@ -138,11 +138,11 @@ const QuotationBuilder = () => {
     }
   };
 
-  if (initialLoading) return <div className="p-8 text-center text-gray-500">Loading quotation...</div>;
+  if (initialLoading) return <div className="p-4 sm:p-8 w-full min-w-0 text-center text-gray-500">Loading quotation...</div>;
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
-      <div className="flex justify-between items-center mb-8">
+    <div className="p-4 sm:p-8 w-full min-w-0 max-w-5xl mx-auto">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div className="flex items-center gap-4">
           <button onClick={() => navigate(`/admin/crm/leads/${leadId}`)} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full">
             <ArrowLeft className="w-6 h-6" />
@@ -293,7 +293,7 @@ const QuotationBuilder = () => {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
           <h2 className="text-lg font-bold text-gray-900">Line Items</h2>
           <button onClick={addItem} className="text-blue-600 hover:text-blue-700 flex items-center gap-1 text-sm font-medium">
             <Plus className="w-4 h-4" /> Add Item
@@ -346,11 +346,11 @@ const QuotationBuilder = () => {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <h2 className="text-lg font-bold text-gray-900 mb-4">Totals</h2>
         <div className="space-y-3 max-w-sm ml-auto">
-          <div className="flex justify-between items-center text-sm">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-sm">
             <span className="text-gray-500">Subtotal Items:</span>
             <span className="font-medium">₹{formData.items.reduce((s, i) => s + (i.quantity * i.unitPrice), 0).toLocaleString()}</span>
           </div>
-          <div className="flex justify-between items-center text-sm">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-sm">
             <span className="text-gray-500">Other Adjustments:</span>
             <input 
               type="number" 
@@ -359,7 +359,7 @@ const QuotationBuilder = () => {
               onChange={(e) => setFormData({...formData, taxes: Number(e.target.value)})}
             />
           </div>
-          <div className="flex justify-between items-center text-sm">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-sm">
             <span className="text-gray-500">Discounts:</span>
             <input 
               type="number" 

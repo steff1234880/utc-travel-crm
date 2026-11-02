@@ -519,7 +519,7 @@ export default function DocumentManagement() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Linked Tour (Optional)</label>
                   <select

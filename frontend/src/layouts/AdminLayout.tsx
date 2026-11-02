@@ -399,6 +399,15 @@ export default function AdminLayout() {
               <div className="flex items-center gap-1 text-xs font-black text-[#8b182b] bg-rose-50 border border-rose-100 px-2 py-1 rounded-md shrink-0">
                 <span>UTC</span>
                 <Plane className="w-3 h-3 text-amber-500 fill-amber-500 -mt-1 -rotate-12" />
+              
+                <button
+                  type="button"
+                  onClick={() => setIsMobileSidebarOpen(false)}
+                  className="lg:hidden p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors ml-1"
+                  aria-label="Close navigation drawer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
             </div>
 

@@ -187,7 +187,7 @@ export default function CEODashboard() {
     : 'N/A (No revenue data)';
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-8 font-sans">
+    <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-6 sm:space-y-8 font-sans w-full min-w-0">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-6">
         <div>
@@ -200,7 +200,7 @@ export default function CEODashboard() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <button
             onClick={fetchDashboardData}
             className="flex items-center px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-700 font-semibold hover:bg-slate-50 transition-colors shadow-sm text-sm"
@@ -220,7 +220,7 @@ export default function CEODashboard() {
 
       {/* Global Filter Bar */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 gap-2">
           <div className="flex items-center gap-2 text-slate-800 font-bold text-sm">
             <Filter className="w-4 h-4 text-blue-600" />
             Global Dashboard Filters
@@ -362,7 +362,7 @@ export default function CEODashboard() {
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex border-b border-slate-200 space-x-2 overflow-x-auto">
+      <div className="flex border-b border-slate-200 space-x-2 overflow-x-auto pb-1 scrollbar-none">
         {[
           { id: 'overview', label: 'Business Overview', icon: Layers },
           { id: 'sales', label: 'Sales Analytics', icon: BarChart3 },
@@ -715,7 +715,7 @@ export default function CEODashboard() {
                 </h3>
 
                 {salesData?.timelineData?.length > 0 ? (
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto w-full min-w-0">
                     <div className="min-w-[600px] flex items-end gap-3 h-40 pt-6 px-4 border-b border-slate-200">
                       {salesData.timelineData.map((item: any, idx: number) => (
                         <div key={idx} className="flex-1 flex flex-col items-center gap-1">
@@ -760,7 +760,7 @@ export default function CEODashboard() {
                   </div>
                 </div>
                 {salesData?.salespersonPerformance?.length > 0 ? (
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto w-full min-w-0">
                     <table className="w-full text-left text-sm font-medium text-slate-700">
                       <thead className="bg-slate-50 text-xs font-bold text-slate-500 uppercase border-b border-slate-200">
                         <tr>
@@ -808,7 +808,7 @@ export default function CEODashboard() {
                   <p className="text-xs text-slate-500 mt-1">Package revenue, enquiry interest & conversion breakdown</p>
                 </div>
                 {salesData?.salesByPackage?.length > 0 ? (
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto w-full min-w-0">
                     <table className="w-full text-left text-sm font-medium text-slate-700">
                       <thead className="bg-slate-50 text-xs font-bold text-slate-500 uppercase border-b border-slate-200">
                         <tr>
@@ -856,7 +856,7 @@ export default function CEODashboard() {
                   <p className="text-xs text-slate-500 mt-1">Geographic performance and demand trends</p>
                 </div>
                 {salesData?.salesByDestination?.length > 0 ? (
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto w-full min-w-0">
                     <table className="w-full text-left text-sm font-medium text-slate-700">
                       <thead className="bg-slate-50 text-xs font-bold text-slate-500 uppercase border-b border-slate-200">
                         <tr>
@@ -1088,7 +1088,7 @@ export default function CEODashboard() {
                 </div>
 
                 {packageData?.packagePerformance?.length > 0 ? (
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto w-full min-w-0">
                     <table className="w-full text-left text-sm font-medium text-slate-700">
                       <thead className="bg-slate-50 text-xs font-bold text-slate-500 uppercase border-b border-slate-200">
                         <tr>
@@ -1211,7 +1211,7 @@ export default function CEODashboard() {
                   </h3>
 
                   {financialData?.monthlyTrend?.length > 0 ? (
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto w-full min-w-0">
                       <div className="min-w-[400px] flex items-end gap-3 h-48 pt-6 px-4 border-b border-slate-200">
                         {financialData.monthlyTrend.map((item: any, idx: number) => {
                           const maxVal = Math.max(...financialData.monthlyTrend.map((m: any) => Math.max(m.revenue, m.expenses)), 1);
@@ -1260,7 +1260,7 @@ export default function CEODashboard() {
                   </h3>
 
                   {financialData?.monthlyTrend?.length > 0 ? (
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto w-full min-w-0">
                       <div className="min-w-[400px] flex items-end gap-3 h-48 pt-6 px-4 border-b border-slate-200">
                         {financialData.monthlyTrend.map((item: any, idx: number) => {
                           const maxProfit = Math.max(...financialData.monthlyTrend.map((m: any) => Math.abs(m.profit)), 1);
@@ -1557,7 +1557,7 @@ export default function CEODashboard() {
                 </h3>
 
                 {employeeData?.monthlyPayrollTrend?.length > 0 ? (
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto w-full min-w-0">
                     <div className="min-w-[500px] flex items-end gap-3 h-44 pt-6 px-4 border-b border-slate-200">
                       {employeeData.monthlyPayrollTrend.map((item: any, idx: number) => {
                         const maxPayroll = Math.max(...employeeData.monthlyPayrollTrend.map((m: any) => m.payroll), 1);
@@ -1598,7 +1598,7 @@ export default function CEODashboard() {
                   </div>
                 </div>
                 {employeeData?.performance?.length > 0 ? (
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto w-full min-w-0">
                     <table className="w-full text-left text-sm font-medium text-slate-700">
                       <thead className="bg-slate-50 text-xs font-bold text-slate-500 uppercase border-b border-slate-200">
                         <tr>
@@ -1896,7 +1896,7 @@ export default function CEODashboard() {
                 </div>
 
                 {operationsData?.coordinatorWorkload?.length > 0 ? (
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto w-full min-w-0">
                     <table className="w-full text-left text-sm font-medium text-slate-700">
                       <thead className="bg-slate-50 text-xs font-bold text-slate-500 uppercase border-b border-slate-200">
                         <tr>
@@ -2005,7 +2005,7 @@ export default function CEODashboard() {
                   </div>
 
                   {operationsData?.groupTourOperations?.upcomingDepartures?.length > 0 ? (
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto w-full min-w-0">
                       <table className="w-full text-left text-sm font-medium text-slate-700">
                         <thead className="bg-slate-50 text-xs font-bold text-slate-500 uppercase border-b border-slate-200">
                           <tr>

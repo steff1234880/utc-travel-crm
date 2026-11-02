@@ -53,7 +53,7 @@ export default function GSTManagement() {
   }
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-8">
+    <div className="p-4 sm:p-8 w-full min-w-0 max-w-7xl mx-auto space-y-8">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -129,7 +129,7 @@ export default function GSTManagement() {
             <tbody className="divide-y divide-slate-100">
               {dashboard?.records?.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-slate-500">No GST records found</td>
+                  <td colSpan={8} className="p-4 sm:p-8 w-full min-w-0 text-center text-slate-500">No GST records found</td>
                 </tr>
               ) : (
                 dashboard?.records?.map((record: any) => (

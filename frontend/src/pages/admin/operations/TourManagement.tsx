@@ -305,7 +305,7 @@ export default function TourManagement() {
   };
 
   return (
-    <div className="p-6 space-y-8 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 w-full min-w-0 space-y-8 max-w-7xl mx-auto">
       {/* Page Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
@@ -399,7 +399,7 @@ export default function TourManagement() {
 
         {/* Error State */}
         {error && (
-          <div className="p-6 m-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 flex items-center">
+          <div className="p-4 sm:p-6 w-full min-w-0 m-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 flex items-center">
             <AlertCircle className="w-5 h-5 mr-3 shrink-0" />
             <span>{error}</span>
           </div>
@@ -579,7 +579,7 @@ export default function TourManagement() {
               </button>
             </div>
 
-            <form onSubmit={handleFormSubmit} className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+            <form onSubmit={handleFormSubmit} className="p-4 sm:p-6 w-full min-w-0 space-y-5 max-h-[80vh] overflow-y-auto">
               {modalError && (
                 <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl flex items-center space-x-2.5 text-rose-800 text-sm font-medium">
                   <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />

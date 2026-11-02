@@ -22,10 +22,10 @@ const SalesDashboard = () => {
     }
   };
 
-  if (loading) return <div className="p-8 text-center text-gray-500">Loading metrics...</div>;
+  if (loading) return <div className="p-4 sm:p-8 w-full min-w-0 text-center text-gray-500">Loading metrics...</div>;
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-6">
+    <div className="p-4 sm:p-8 w-full min-w-0 max-w-7xl mx-auto space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Sales Dashboard</h1>

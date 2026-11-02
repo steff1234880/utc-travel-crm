@@ -89,7 +89,7 @@ export default function EnquiryDashboard() {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 w-full min-w-0 max-w-7xl mx-auto">
       {/* Feedback Alert */}
       {feedback && (
         <div className={`mb-6 p-4 rounded-xl flex items-center justify-between shadow-sm border ${

@@ -43,7 +43,7 @@ export default function PaymentTable({ transactions, onViewReceipt, onEditTransa
         <tbody className="divide-y divide-slate-100">
           {transactions.length === 0 ? (
             <tr>
-              <td colSpan={7} className="p-8 text-center text-slate-500">
+              <td colSpan={7} className="p-4 sm:p-8 w-full min-w-0 text-center text-slate-500">
                 No payments found matching the selected criteria.
               </td>
             </tr>
