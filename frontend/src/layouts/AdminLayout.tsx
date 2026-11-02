@@ -57,7 +57,8 @@ export default function AdminLayout() {
       badgeColor: 'bg-rose-50 text-rose-700 border border-rose-100',
       items: [
         { name: 'Enquiries', path: '/admin/enquiries', icon: Users, module: 'Enquiries' },
-        { name: 'Feedback Enquiries', path: '/admin/feedback-enquiries', icon: MessageSquare, module: 'Settings', roles: ['CEO / Super Admin', 'SUPER_ADMIN', 'Admin', 'ADMIN'] }
+        { name: 'Feedback Enquiries', path: '/admin/feedback-enquiries', icon: MessageSquare, module: 'Settings', roles: ['CEO / Super Admin', 'SUPER_ADMIN', 'Admin', 'ADMIN'] },
+        { name: 'Meta Analytics', path: '/admin/crm/meta-analytics', icon: Share2, module: 'Enquiries' }
       ]
     },
     {
