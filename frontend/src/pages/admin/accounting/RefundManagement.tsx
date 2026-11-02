@@ -123,7 +123,7 @@ export default function RefundManagement() {
   };
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-6">
+    <div className="p-4 sm:p-8 w-full min-w-0 max-w-7xl mx-auto space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Refund Management</h1>
@@ -281,7 +281,7 @@ export default function RefundManagement() {
               <tbody className="divide-y divide-slate-100">
                 {transactions.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-slate-500">
+                    <td colSpan={8} className="p-4 sm:p-8 w-full min-w-0 text-center text-slate-500">
                       No refund records found matching the selected criteria.
                     </td>
                   </tr>

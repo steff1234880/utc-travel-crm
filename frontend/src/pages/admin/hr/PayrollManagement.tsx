@@ -242,7 +242,7 @@ export default function PayrollManagement() {
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-8 w-full min-w-0 max-w-7xl mx-auto">
       {/* Toast Notifications */}
       <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
         {toasts.map(toast => (
@@ -343,8 +343,9 @@ export default function PayrollManagement() {
       {activeSubTab === 'records' && (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
           {isPayrollLoading ? (
-            <div className="p-8 text-center text-slate-500">Loading payroll history...</div>
+            <div className="p-4 sm:p-8 w-full min-w-0 text-center text-slate-500">Loading payroll history...</div>
           ) : (
+      <div className="overflow-x-auto w-full min-w-0">
             <table className="w-full">
               <thead className="bg-slate-50 border-b border-slate-100 text-left text-sm font-bold text-slate-500 uppercase">
                 <tr>
@@ -404,6 +405,7 @@ export default function PayrollManagement() {
                 )}
               </tbody>
             </table>
+      </div>
           )}
         </div>
       )}
@@ -412,8 +414,9 @@ export default function PayrollManagement() {
       {activeSubTab === 'structures' && (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
           {isStructuresLoading ? (
-            <div className="p-8 text-center text-slate-500">Loading salary structures...</div>
+            <div className="p-4 sm:p-8 w-full min-w-0 text-center text-slate-500">Loading salary structures...</div>
           ) : (
+      <div className="overflow-x-auto w-full min-w-0">
             <table className="w-full">
               <thead className="bg-slate-50 border-b border-slate-100 text-left text-sm font-bold text-slate-500 uppercase">
                 <tr>
@@ -457,6 +460,7 @@ export default function PayrollManagement() {
                 })}
               </tbody>
             </table>
+      </div>
           )}
         </div>
       )}

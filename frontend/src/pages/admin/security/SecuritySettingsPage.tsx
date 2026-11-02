@@ -63,7 +63,7 @@ export default function SecuritySettingsPage() {
 
   if (loading) {
     return (
-      <div className="p-8 max-w-7xl mx-auto text-center py-16">
+      <div className="p-4 sm:p-8 w-full min-w-0 max-w-7xl mx-auto text-center py-16">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
         <p className="text-gray-500 text-sm">Loading security configuration...</p>
       </div>
@@ -71,9 +71,9 @@ export default function SecuritySettingsPage() {
   }
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
+    <div className="p-4 sm:p-8 w-full min-w-0 max-w-5xl mx-auto">
       {/* Header */}
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
             <Lock className="w-8 h-8 text-blue-600" /> Security Settings & Policies

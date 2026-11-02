@@ -65,7 +65,7 @@ export default function MetaAnalytics() {
   const pixelEvents = data?.data?.pixelConversions || [];
 
   return (
-    <div className="p-6 md:p-8 space-y-8 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 w-full min-w-0 md:p-8 space-y-8 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

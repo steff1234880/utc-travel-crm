@@ -78,7 +78,7 @@ export default function GSTConfigModal({ onClose, onSuccess, initialData }: GSTC
 
             {formData.isEnabled && (
               <>
-                <div className="grid grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">Default GST Rate (%)</label>
                     <input 
@@ -114,7 +114,7 @@ export default function GSTConfigModal({ onClose, onSuccess, initialData }: GSTC
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">Company Legal Name</label>
                     <input 
@@ -146,7 +146,7 @@ export default function GSTConfigModal({ onClose, onSuccess, initialData }: GSTC
                   ></textarea>
                 </div>
                 
-                <div className="grid grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">State / Province</label>
                     <input 

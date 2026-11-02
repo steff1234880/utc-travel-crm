@@ -40,7 +40,7 @@ export default function ProfitLossStatement() {
   if (loading) return <div className="flex h-96 items-center justify-center"><Loader2 className="w-8 h-8 animate-spin" /></div>;
 
   return (
-    <div className="p-8 max-w-5xl mx-auto space-y-6">
+    <div className="p-4 sm:p-8 w-full min-w-0 max-w-5xl mx-auto space-y-6">
       <div className="flex justify-between items-end mb-6">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Profit & Loss Statement</h1>

@@ -118,11 +118,11 @@ const LeadDetails = () => {
     }
   };
 
-  if (loading) return <div className="p-8 text-center text-gray-500">Loading lead details...</div>;
-  if (!lead) return <div className="p-8 text-center text-red-500">Lead not found</div>;
+  if (loading) return <div className="p-4 sm:p-8 w-full min-w-0 text-center text-gray-500">Loading lead details...</div>;
+  if (!lead) return <div className="p-4 sm:p-8 w-full min-w-0 text-center text-red-500">Lead not found</div>;
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-8 w-full min-w-0 max-w-7xl mx-auto">
       <button 
         onClick={() => navigate('/admin/crm/pipeline')}
         className="flex items-center gap-2 text-gray-500 hover:text-gray-900 mb-6 transition-colors"
@@ -207,7 +207,7 @@ const LeadDetails = () => {
           </div>
 
           <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm mt-6">
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
               <h2 className="text-lg font-bold text-gray-900">Scheduled Follow-ups</h2>
               <button 
                 onClick={() => {
@@ -255,7 +255,7 @@ const LeadDetails = () => {
           </div>
 
           <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm mt-6">
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
               <h2 className="text-lg font-bold text-gray-900">Quotations</h2>
               <button 
                 onClick={() => navigate(`/admin/crm/leads/${id}/quote`)}

@@ -88,8 +88,8 @@ export default function HRDashboard() {
     },
   });
 
-  if (isStatsLoading) return <div className="p-8 text-center text-slate-500">Loading HR Dashboard...</div>;
-  if (isStatsError) return <div className="p-8 text-center text-red-500">Failed to load HR stats</div>;
+  if (isStatsLoading) return <div className="p-4 sm:p-8 w-full min-w-0 text-center text-slate-500">Loading HR Dashboard...</div>;
+  if (isStatsError) return <div className="p-4 sm:p-8 w-full min-w-0 text-center text-red-500">Failed to load HR stats</div>;
 
   const topPerformer = performersData?.topPerformer;
   const rankings = performersData?.rankings || [];

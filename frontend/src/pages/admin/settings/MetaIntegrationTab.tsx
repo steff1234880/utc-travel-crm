@@ -194,9 +194,9 @@ export default function MetaIntegrationTab() {
   const connections = data?.data?.connections;
 
   return (
-    <div className="space-y-8 max-w-5xl">
+    <div className="space-y-6 sm:space-y-8 max-w-5xl w-full min-w-0">
       {/* Header & Mode Badge */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-blue-900 to-indigo-900 text-white p-6 rounded-3xl shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-blue-900 to-indigo-900 text-white p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-sm">
         <div>
           <div className="flex items-center gap-2.5">
             <Share2 className="w-6 h-6 text-blue-300" />
@@ -347,8 +347,8 @@ export default function MetaIntegrationTab() {
       </div>
 
       {/* 2. Webhook & Endpoint Details */}
-      <div className="bg-slate-900 text-slate-200 rounded-3xl p-6 border border-slate-800 shadow-md">
-        <div className="flex items-center justify-between mb-4">
+      <div className="bg-slate-900 text-slate-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-slate-800 shadow-md w-full min-w-0">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
           <div className="flex items-center gap-2">
             <Database className="w-5 h-5 text-indigo-400" />
             <h3 className="text-sm font-bold text-white uppercase tracking-wider">Meta App & Webhook Endpoints</h3>
@@ -381,8 +381,8 @@ export default function MetaIntegrationTab() {
       </div>
 
       {/* 3. Meta App Configuration Form */}
-      <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-2xs space-y-6">
-        <div className="border-b border-slate-100 pb-4 flex items-center justify-between">
+      <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-slate-200/80 shadow-2xs space-y-6 w-full min-w-0">
+        <div className="border-b border-slate-100 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h3 className="text-base font-bold text-slate-900">Meta App & Tracking Credentials</h3>
             <p className="text-xs text-slate-500 mt-0.5">Secure server-side storage for App IDs, Secrets and Conversions API tokens.</p>
@@ -503,7 +503,7 @@ export default function MetaIntegrationTab() {
           </label>
         </div>
 
-        <div className="flex justify-end pt-2">
+        <div className="flex flex-col sm:flex-row justify-end pt-2 gap-3">
           <button
             onClick={() => saveConfigMutation.mutate()}
             disabled={saveConfigMutation.isPending}
@@ -517,7 +517,7 @@ export default function MetaIntegrationTab() {
       {/* 4. Live Testing & Sandbox Tools (For verifying without client credentials) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* WhatsApp Dispatch Test */}
-        <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-2xs space-y-4">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-slate-200/80 shadow-2xs space-y-4 w-full min-w-0">
           <div className="flex items-center gap-2">
             <MessageCircle className="w-5 h-5 text-emerald-600" />
             <h3 className="text-sm font-bold text-slate-900">WhatsApp Dispatch Test</h3>
@@ -557,7 +557,7 @@ export default function MetaIntegrationTab() {
         </div>
 
         {/* Lead Ingestion Simulator */}
-        <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-2xs space-y-4">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-slate-200/80 shadow-2xs space-y-4 w-full min-w-0">
           <div className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-blue-600" />
             <h3 className="text-sm font-bold text-slate-900">Meta Lead Ad Simulator</h3>
@@ -567,7 +567,7 @@ export default function MetaIntegrationTab() {
           </p>
 
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 mb-1">Platform</label>
                 <select
@@ -590,7 +590,7 @@ export default function MetaIntegrationTab() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 mb-1">Email</label>
                 <input
@@ -624,7 +624,7 @@ export default function MetaIntegrationTab() {
       </div>
 
       {/* 5. Client Setup & Onboarding Instructions */}
-      <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-2xs space-y-4">
+      <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-slate-200/80 shadow-2xs space-y-4 w-full min-w-0">
         <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
           <Key className="w-4 h-4 text-slate-600" />
           Instructions for Client Meta Business Account Connection

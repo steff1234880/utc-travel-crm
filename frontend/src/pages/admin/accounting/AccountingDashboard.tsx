@@ -138,7 +138,7 @@ export default function AccountingDashboard() {
   }
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-8">
+    <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-6 sm:space-y-8 w-full min-w-0">
       {/* Feedback Banner */}
       {feedback && (
         <div className={`p-4 rounded-xl flex items-center justify-between shadow-sm border ${
@@ -184,7 +184,7 @@ export default function AccountingDashboard() {
       </div>
 
       {/* Metrics Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex flex-col justify-between group hover:border-blue-300 transition-colors">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-slate-500">Total Revenue</h3>

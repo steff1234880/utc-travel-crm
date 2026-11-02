@@ -386,7 +386,7 @@ export default function Settings() {
   const destinations: DestinationItem[] = homeContentData?.data?.destinations || [];
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
+    <div className="p-4 sm:p-8 max-w-5xl mx-auto w-full min-w-0">
       <div className="mb-8">
         <h1 className="text-3xl font-black text-slate-900 tracking-tight">System & Account Settings</h1>
         <p className="text-slate-500 mt-1">Manage user profile, security preferences, and public website content.</p>
@@ -402,7 +402,7 @@ export default function Settings() {
       )}
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-200 mb-8 space-x-8 overflow-x-auto">
+      <div className="flex border-b border-slate-200 mb-6 sm:mb-8 space-x-4 sm:space-x-8 overflow-x-auto scrollbar-none pb-1">
         <button
           onClick={() => { setActiveTab('profile'); setFeedback(null); }}
           className={`pb-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${
@@ -477,7 +477,7 @@ export default function Settings() {
             <input type="url" value={profileForm.avatar} onChange={e => setProfileForm({ ...profileForm, avatar: e.target.value })} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="https://images.unsplash.com/..." />
           </div>
 
-          <div className="pt-4 border-t border-slate-100 flex justify-end">
+          <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row justify-end gap-3">
             <button type="submit" disabled={updateProfileMutation.isPending} className="flex items-center px-6 py-2.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50">
               <Save className="w-4 h-4 mr-2" />
               {updateProfileMutation.isPending ? 'Saving...' : 'Save Profile Changes'}
@@ -585,7 +585,7 @@ export default function Settings() {
 
           {/* SECTION A: HERO BANNER MANAGEMENT */}
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 space-y-6">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-4 gap-3">
               <div className="flex items-center space-x-3">
                 <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
                   <ImageIcon className="w-5 h-5" />
@@ -806,7 +806,7 @@ export default function Settings() {
                     />
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
                     <label className="flex items-center px-4 py-2 bg-indigo-600 text-white font-bold text-xs rounded-xl hover:bg-indigo-700 cursor-pointer transition-colors shadow-xs">
                       <span>Replace Map Image</span>
                       <input
@@ -924,7 +924,7 @@ export default function Settings() {
 
               <div className="space-y-3">
                 {destinations.map((d) => (
-                  <div key={d.id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div key={d.id} className="p-3 sm:p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4 w-full min-w-0">
                     <div className="flex items-center space-x-3 w-full md:w-1/3">
                       <MapPin className="w-5 h-5 text-indigo-600 shrink-0" />
                       <div className="w-full">
@@ -1214,7 +1214,7 @@ export default function Settings() {
             {/* Working Days Checkboxes */}
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Configured Working Days</label>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5 sm:gap-2">
                 {[
                   { day: 1, label: 'Mon' },
                   { day: 2, label: 'Tue' },

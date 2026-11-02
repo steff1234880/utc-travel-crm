@@ -728,7 +728,7 @@ export default function TrainTicketManagement() {
             </div>
 
             <div className="p-6 space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <div>
                   <div className="text-slate-400 font-semibold">Operator / Train</div>
                   <div className="font-bold text-slate-900">{viewingTicket.operator}</div>
@@ -821,7 +821,7 @@ export default function TrainTicketManagement() {
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 pt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
               <button
                 type="button"
                 onClick={handleCloseDeleteModal}
