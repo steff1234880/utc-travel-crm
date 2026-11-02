@@ -70,7 +70,6 @@ export default function AdminLayout() {
       items: [
         { name: 'Sales CRM', path: '/admin/crm/dashboard', icon: TrendingUp, module: 'Sales CRM' },
         { name: 'Sales Pipeline', path: '/admin/crm/pipeline', icon: Columns, module: 'Sales CRM' },
-        { name: 'Meta Analytics', path: '/admin/crm/meta-analytics', icon: Share2, module: 'Sales CRM' }
       ]
     },
     {

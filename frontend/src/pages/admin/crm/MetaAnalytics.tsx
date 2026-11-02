@@ -6,7 +6,7 @@ import {
   Users,
   MessageCircle,
   Share2,
-  DollarSign,
+  IndianRupee,
   Activity,
   ArrowUpRight,
   Filter,
@@ -48,6 +48,21 @@ interface MetaAnalyticsData {
     event: string;
     count: number;
   }>;
+}
+
+
+function formatToINR(val: string | number | undefined | null): string {
+  if (val === undefined || val === null || val === '') return '₹0.00';
+  if (typeof val === 'number') {
+    return '₹' + val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  const str = String(val);
+  return str.replace(/\$?\s*([0-9]+(?:\.[0-9]+)?)\s*(?:USD)?/gi, (match, p1) => {
+    const num = parseFloat(p1);
+    if (isNaN(num)) return match;
+    return '₹' + num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }).replace(/\$/g, '₹').replace(/\bUSD\b/gi, '').replace(/\s{2,}/g, ' ').trim();
 }
 
 export default function MetaAnalytics() {
@@ -138,11 +153,11 @@ export default function MetaAnalytics() {
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-500">Avg Cost per Lead (CPL)</span>
             <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-              <DollarSign className="w-4 h-4" />
+              <IndianRupee className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3">
-            <span className="text-2xl font-black text-slate-900">{stats?.costPerLead || '$4.85 USD'}</span>
+            <span className="text-2xl font-black text-slate-900">{formatToINR(stats?.costPerLead || '4.85')}</span>
             <span className="text-[11px] text-blue-600 font-bold ml-2">{stats?.ctr || '4.37%'} CTR</span>
           </div>
           <p className="text-[11px] text-slate-400 mt-1">From connected Meta Ad Accounts</p>
@@ -188,8 +203,8 @@ export default function MetaAnalytics() {
                       </span>
                     </td>
                     <td className="px-3 py-3.5 font-bold text-slate-900">{camp.leads}</td>
-                    <td className="px-3 py-3.5 text-slate-600">{camp.spend}</td>
-                    <td className="px-3 py-3.5 font-bold text-blue-600">{camp.cpl}</td>
+                    <td className="px-3 py-3.5 text-slate-600">{formatToINR(camp.spend)}</td>
+                    <td className="px-3 py-3.5 font-bold text-blue-600">{formatToINR(camp.cpl)}</td>
                   </tr>
                 ))}
               </tbody>
