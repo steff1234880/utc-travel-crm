@@ -82,10 +82,21 @@ export const getSalesDashboardMetrics = async (req: Request, res: Response) => {
 
 export const getSalesPipeline = async (req: Request, res: Response) => {
   try {
+    const userRole = await prisma.role.findUnique({ where: { id: req.user?.roleId || '' } });
+    const normalizedRole = (userRole?.name || '').toUpperCase().trim();
+    let leadFilter: any = {};
+    if (normalizedRole === 'SALES_EXECUTIVE' || normalizedRole === 'SALES EXECUTIVE') {
+      const employee = await prisma.employee.findUnique({ where: { userId: req.user!.userId } });
+      if (employee) {
+        leadFilter = { assignedToId: employee.id };
+      }
+    }
+
     const stages = await prisma.salesPipelineStage.findMany({
       orderBy: { orderIndex: 'asc' },
       include: {
         leads: {
+          where: leadFilter,
           include: { customer: true, assignedTo: true },
           orderBy: { updatedAt: 'desc' }
         }

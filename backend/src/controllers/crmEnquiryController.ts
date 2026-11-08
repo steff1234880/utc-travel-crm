@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
 import { z } from 'zod';
+import { assignLeadAutomatically, assignLeadManually } from '../services/leadAssignmentService';
 
 // ─── Zod Schemas ─────────────────────────────────────────────────────────────
 
@@ -254,20 +255,45 @@ export async function submitEnquiry(req: Request, res: Response): Promise<void> 
     });
 
     if (pipelineStage) {
-      await prisma.salesLead.create({
-        data: {
-          title: isCustomTour 
-            ? `Custom Tour: ${data.destination || 'General'} (${enquiry.referenceNumber})`
-            : `Package Booking (${tierInfo.name}): ${enquiry.referenceNumber}`,
-          source: sourceTag,
-          status: 'NEW',
-          expectedValue: calculatedTotal,
-          currency: 'INR',
-          customerId: customer.id,
-          pipelineStageId: pipelineStage.id,
-          enquiryId: enquiry.id
+      try {
+        const createdLead = await prisma.salesLead.create({
+          data: {
+            title: isCustomTour 
+              ? `Custom Tour: ${data.destination || 'General'} (${enquiry.referenceNumber})`
+              : `Package Booking (${tierInfo.name}): ${enquiry.referenceNumber}`,
+            source: sourceTag,
+            status: 'NEW',
+            expectedValue: calculatedTotal,
+            currency: 'INR',
+            customerId: customer.id,
+            pipelineStageId: pipelineStage.id,
+            enquiryId: enquiry.id
+          }
+        });
+
+        // Trigger Hybrid Automatic Lead Assignment
+        const assignResult = await assignLeadAutomatically(createdLead.id).catch((e) => {
+          console.error('Lead auto-assignment warning:', e);
+          return null;
+        });
+
+        // Synchronize EnquiryAssignment with assigned Sales Executive
+        if (assignResult?.assignedTo?.id) {
+          const existingAssignment = await prisma.enquiryAssignment.findFirst({
+            where: { enquiryId: enquiry.id, employeeId: assignResult.assignedTo.id }
+          });
+          if (!existingAssignment) {
+            await prisma.enquiryAssignment.create({
+              data: {
+                enquiryId: enquiry.id,
+                employeeId: assignResult.assignedTo.id
+              }
+            }).catch((err) => console.error('EnquiryAssignment sync warning:', err));
+          }
         }
-      }).catch((e) => console.error('Sales lead creation warning:', e));
+      } catch (e) {
+        console.error('Sales lead creation warning:', e);
+      }
     }
 
     // 9. Status History Log
@@ -299,6 +325,120 @@ export async function submitEnquiry(req: Request, res: Response): Promise<void> 
   }
 }
 
+// ─── Security & Role Access Context Helpers ────────────────────────────────────
+
+interface EnquiryAccessContext {
+  isSuperOrAdmin: boolean;
+  isSalesManager: boolean;
+  isSalesExecutive: boolean;
+  employeeId?: string;
+}
+
+async function getEnquiryAccessContext(req: Request): Promise<EnquiryAccessContext> {
+  if (!req.user) {
+    return { isSuperOrAdmin: false, isSalesManager: false, isSalesExecutive: false };
+  }
+
+  const roleName = (req.user.roleName || '').toUpperCase().trim();
+  const isSuperOrAdmin =
+    roleName.includes('SUPER') ||
+    roleName.includes('CEO') ||
+    roleName === 'ADMIN' ||
+    roleName === 'SUPER_ADMIN';
+
+  const isSalesManager =
+    isSuperOrAdmin ||
+    roleName.includes('SALES MANAGER') ||
+    roleName === 'SALES_MANAGER';
+
+  const isSalesExecutive =
+    !isSuperOrAdmin &&
+    !isSalesManager &&
+    (roleName.includes('SALES EXECUTIVE') || roleName === 'SALES_EXECUTIVE');
+
+  let employeeId: string | undefined;
+  if (isSalesExecutive) {
+    const emp = await prisma.employee.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true }
+    });
+    employeeId = emp?.id;
+  }
+
+  return {
+    isSuperOrAdmin,
+    isSalesManager,
+    isSalesExecutive,
+    employeeId
+  };
+}
+
+async function verifyEnquiryOwnership(enquiryId: string, req: Request): Promise<{
+  allowed: boolean;
+  enquiry?: any;
+  errorStatus?: number;
+  errorMessage?: string;
+}> {
+  const access = await getEnquiryAccessContext(req);
+
+  const enquiry = await prisma.enquiry.findUnique({
+    where: { id: enquiryId },
+    include: {
+      customer: true,
+      package: { select: { title: true, slug: true, basePrice: true, currency: true } },
+      assignments: {
+        include: {
+          employee: { select: { id: true, firstName: true, lastName: true, designation: { select: { name: true } } } },
+        },
+      },
+      salesLead: {
+        select: {
+          id: true,
+          title: true,
+          assignedToId: true,
+          assignmentType: true,
+          assignedTo: { select: { id: true, firstName: true, lastName: true } }
+        }
+      },
+      notes: { orderBy: { createdAt: 'desc' } },
+      followUps: { 
+        include: {
+          employee: { select: { id: true, firstName: true, lastName: true } }
+        },
+        orderBy: { scheduledFor: 'asc' } 
+      },
+      statusHistory: { orderBy: { createdAt: 'asc' } },
+    }
+  });
+
+  if (!enquiry) {
+    return { allowed: false, errorStatus: 404, errorMessage: 'Enquiry not found.' };
+  }
+
+  // CEO, Super Admin, and Sales Manager have full company-wide enquiry access
+  if (access.isSuperOrAdmin || access.isSalesManager) {
+    return { allowed: true, enquiry };
+  }
+
+  // Sales Executive: Must be assigned in EnquiryAssignment or linked SalesLead
+  if (access.isSalesExecutive) {
+    if (!access.employeeId) {
+      return { allowed: false, errorStatus: 403, errorMessage: 'Access denied: You are not authorized to access this enquiry.' };
+    }
+
+    const isAssignedViaEnquiry = enquiry.assignments.some(
+      (a: any) => a.employeeId === access.employeeId || a.employee?.id === access.employeeId
+    );
+    const isAssignedViaLead = enquiry.salesLead?.assignedToId === access.employeeId;
+
+    if (!isAssignedViaEnquiry && !isAssignedViaLead) {
+      return { allowed: false, errorStatus: 403, errorMessage: 'Access denied: You are not authorized to access this enquiry.' };
+    }
+  }
+
+  return { allowed: true, enquiry };
+}
+
 // ─── CRM: List Enquiries ──────────────────────────────────────────────────────
 
 export async function listEnquiries(req: Request, res: Response): Promise<void> {
@@ -309,17 +449,46 @@ export async function listEnquiries(req: Request, res: Response): Promise<void> 
     const source = Array.isArray(req.query.source) ? req.query.source[0] : req.query.source as string | undefined;
     const search = Array.isArray(req.query.search) ? req.query.search[0] : req.query.search as string | undefined;
 
-    const where: Record<string, unknown> = {};
-    if (status) where.status = status;
-    if (source) where.source = source;
+    const access = await getEnquiryAccessContext(req);
+
+    const andConditions: any[] = [];
+    if (status) andConditions.push({ status });
+    if (source) andConditions.push({ source });
     if (search) {
-      where.OR = [
-        { referenceNumber: { contains: search, mode: 'insensitive' } },
-        { customer: { email: { contains: search, mode: 'insensitive' } } },
-        { customer: { firstName: { contains: search, mode: 'insensitive' } } },
-        { customer: { phone: { contains: search, mode: 'insensitive' } } },
-      ];
+      andConditions.push({
+        OR: [
+          { referenceNumber: { contains: search, mode: 'insensitive' } },
+          { customer: { email: { contains: search, mode: 'insensitive' } } },
+          { customer: { firstName: { contains: search, mode: 'insensitive' } } },
+          { customer: { phone: { contains: search, mode: 'insensitive' } } },
+        ],
+      });
     }
+
+    // Role-based visibility scoping
+    if (access.isSalesExecutive) {
+      if (!access.employeeId) {
+        andConditions.push({ id: '__NO_ACCESS__' });
+      } else {
+        andConditions.push({
+          OR: [
+            { assignments: { some: { employeeId: access.employeeId } } },
+            { salesLead: { assignedToId: access.employeeId } }
+          ]
+        });
+      }
+    } else if (req.query.unassigned === 'true' || req.query.assigned === 'unassigned') {
+      // Sales Manager or Admin Unassigned Queue
+      andConditions.push({
+        assignments: { none: {} },
+        OR: [
+          { salesLead: { is: null } },
+          { salesLead: { assignedToId: null } }
+        ]
+      });
+    }
+
+    const where = andConditions.length > 0 ? { AND: andConditions } : {};
 
     const [total, enquiries] = await Promise.all([
       prisma.enquiry.count({ where }),
@@ -330,8 +499,16 @@ export async function listEnquiries(req: Request, res: Response): Promise<void> 
           package: { select: { title: true, slug: true } },
           assignments: {
             include: {
-              employee: { select: { firstName: true, lastName: true } },
+              employee: { select: { id: true, firstName: true, lastName: true } },
             },
+          },
+          salesLead: {
+            select: {
+              id: true,
+              assignedToId: true,
+              assignmentType: true,
+              assignedTo: { select: { id: true, firstName: true, lastName: true } }
+            }
           },
           followUps: {
             where: { status: 'PENDING' },
@@ -361,33 +538,13 @@ export async function listEnquiries(req: Request, res: Response): Promise<void> 
 export async function getEnquiryById(req: Request, res: Response): Promise<void> {
   try {
     const { id } = req.params;
-    const enquiry = await prisma.enquiry.findUnique({
-      where: { id: id as string },
-      include: {
-        customer: true,
-        package: { select: { title: true, slug: true, basePrice: true, currency: true } },
-        assignments: {
-          include: {
-            employee: { select: { id: true, firstName: true, lastName: true, designation: { select: { name: true } } } },
-          },
-        },
-        notes: { orderBy: { createdAt: 'desc' } },
-        followUps: { 
-          include: {
-            employee: { select: { id: true, firstName: true, lastName: true } }
-          },
-          orderBy: { scheduledFor: 'asc' } 
-        },
-        statusHistory: { orderBy: { createdAt: 'asc' } },
-      },
-    });
-
-    if (!enquiry) {
-      res.status(404).json({ success: false, message: 'Enquiry not found.' });
+    const check = await verifyEnquiryOwnership(id as string, req);
+    if (!check.allowed) {
+      res.status(check.errorStatus || 403).json({ success: false, message: check.errorMessage || 'Access denied.' });
       return;
     }
 
-    res.json({ success: true, data: enquiry });
+    res.json({ success: true, data: check.enquiry });
   } catch (error) {
     console.error('Get enquiry error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch enquiry.' });
@@ -401,11 +558,13 @@ export async function updateEnquiryStatus(req: Request, res: Response): Promise<
     const { id } = req.params;
     const { status, remarks } = updateStatusSchema.parse(req.body);
 
-    const existing = await prisma.enquiry.findUnique({ where: { id: id as string } });
-    if (!existing) {
-      res.status(404).json({ success: false, message: 'Enquiry not found.' });
+    const check = await verifyEnquiryOwnership(id as string, req);
+    if (!check.allowed) {
+      res.status(check.errorStatus || 403).json({ success: false, message: check.errorMessage || 'Access denied.' });
       return;
     }
+
+    const existing = check.enquiry;
 
     const txOperations: any[] = [
       prisma.enquiry.update({ where: { id: id as string }, data: { status } }),
@@ -421,6 +580,8 @@ export async function updateEnquiryStatus(req: Request, res: Response): Promise<
     ];
 
     const mappedStageName = statusToStageMap[status];
+    let createdNewLead = false;
+    let assignedEmployeeId = existing.assignments?.[0]?.employeeId || null;
 
     if (mappedStageName) {
       const existingLead = await prisma.salesLead.findUnique({
@@ -433,7 +594,9 @@ export async function updateEnquiryStatus(req: Request, res: Response): Promise<
 
       if (pipelineStage) {
         if (!existingLead) {
+          createdNewLead = true;
           // Lead doesn't exist yet, create it and map it to the stage
+          // If enquiry already has an assigned employee, preserve that ownership!
           txOperations.push(
             prisma.salesLead.create({
               data: {
@@ -442,12 +605,15 @@ export async function updateEnquiryStatus(req: Request, res: Response): Promise<
                 status: 'NEW',
                 customerId: existing.customerId,
                 pipelineStageId: pipelineStage.id,
-                enquiryId: id as string
+                enquiryId: id as string,
+                assignedToId: assignedEmployeeId,
+                assignmentType: assignedEmployeeId ? 'MANUAL' : undefined,
+                assignedAt: assignedEmployeeId ? new Date() : undefined,
               }
             })
           );
         } else {
-          // Lead exists, just update its pipeline stage
+          // Lead exists, preserve ownership and update its pipeline stage
           txOperations.push(
             prisma.salesLead.update({
               where: { id: existingLead.id },
@@ -459,6 +625,26 @@ export async function updateEnquiryStatus(req: Request, res: Response): Promise<
     }
 
     await prisma.$transaction(txOperations);
+
+    // If new lead was created and had no prior enquiry assignment, trigger automatic assignment
+    if (createdNewLead && !assignedEmployeeId) {
+      const newlyCreatedLead = await prisma.salesLead.findUnique({ where: { enquiryId: id as string } });
+      if (newlyCreatedLead) {
+        const assignResult = await assignLeadAutomatically(newlyCreatedLead.id).catch((err) => {
+          console.error('Lead auto-assignment on status conversion warning:', err);
+          return null;
+        });
+
+        if (assignResult?.assignedTo?.id) {
+          await prisma.enquiryAssignment.create({
+            data: {
+              enquiryId: id as string,
+              employeeId: assignResult.assignedTo.id,
+            }
+          }).catch(() => {});
+        }
+      }
+    }
 
     res.json({ success: true, message: `Status updated to ${status}` });
   } catch (error) {
@@ -478,6 +664,12 @@ export async function addNote(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
     const { text } = addNoteSchema.parse(req.body);
     const authorId = req.user?.userId ?? 'system';
+
+    const check = await verifyEnquiryOwnership(id as string, req);
+    if (!check.allowed) {
+      res.status(check.errorStatus || 403).json({ success: false, message: check.errorMessage || 'Access denied.' });
+      return;
+    }
 
     const note = await prisma.enquiryNote.create({
       data: { enquiryId: id as string, text, authorId },
@@ -500,6 +692,12 @@ export async function scheduleFollowUp(req: Request, res: Response): Promise<voi
   try {
     const id = req.params.id as string;
     const data = scheduleFollowUpSchema.parse(req.body);
+
+    const check = await verifyEnquiryOwnership(id, req);
+    if (!check.allowed) {
+      res.status(check.errorStatus || 403).json({ success: false, message: check.errorMessage || 'Access denied.' });
+      return;
+    }
 
     let assignedEmpId = data.employeeId;
     if (!assignedEmpId) {
@@ -562,6 +760,14 @@ export async function updateFollowUp(req: Request, res: Response): Promise<void>
       return;
     }
 
+    if (existing.enquiryId) {
+      const check = await verifyEnquiryOwnership(existing.enquiryId, req);
+      if (!check.allowed) {
+        res.status(check.errorStatus || 403).json({ success: false, message: check.errorMessage || 'Access denied.' });
+        return;
+      }
+    }
+
     const updateData: any = {};
     if (data.type) updateData.type = data.type;
     if (data.notes !== undefined) updateData.notes = data.notes;
@@ -592,7 +798,47 @@ export async function updateFollowUp(req: Request, res: Response): Promise<void>
 
 export async function getDashboardStats(req: Request, res: Response): Promise<void> {
   try {
-    const [total, newEnquiries, pendingFollowUps, converted] = await Promise.all([
+    const access = await getEnquiryAccessContext(req);
+
+    if (access.isSalesExecutive) {
+      if (!access.employeeId) {
+        res.json({
+          success: true,
+          data: { total: 0, newEnquiries: 0, pendingFollowUps: 0, converted: 0, conversionRate: '0.0', unassignedCount: 0 },
+        });
+        return;
+      }
+
+      const execScope = {
+        OR: [
+          { assignments: { some: { employeeId: access.employeeId } } },
+          { salesLead: { assignedToId: access.employeeId } }
+        ]
+      };
+
+      const [total, newEnquiries, pendingFollowUps, converted] = await Promise.all([
+        prisma.enquiry.count({ where: execScope }),
+        prisma.enquiry.count({ where: { ...execScope, status: 'NEW' } }),
+        prisma.followUp.count({
+          where: {
+            employeeId: access.employeeId,
+            status: 'PENDING',
+            scheduledFor: { lte: new Date() },
+          }
+        }),
+        prisma.enquiry.count({ where: { ...execScope, status: 'CONVERTED' } }),
+      ]);
+
+      const conversionRate = total > 0 ? ((converted / total) * 100).toFixed(1) : '0.0';
+
+      res.json({
+        success: true,
+        data: { total, newEnquiries, pendingFollowUps, converted, conversionRate, unassignedCount: 0 },
+      });
+      return;
+    }
+
+    const [total, newEnquiries, pendingFollowUps, converted, unassignedCount] = await Promise.all([
       prisma.enquiry.count(),
       prisma.enquiry.count({ where: { status: 'NEW' } }),
       prisma.followUp.count({
@@ -604,17 +850,128 @@ export async function getDashboardStats(req: Request, res: Response): Promise<vo
         }
       }),
       prisma.enquiry.count({ where: { status: 'CONVERTED' } }),
+      prisma.enquiry.count({
+        where: {
+          assignments: { none: {} },
+          OR: [
+            { salesLead: { is: null } },
+            { salesLead: { assignedToId: null } }
+          ]
+        }
+      }),
     ]);
 
     const conversionRate = total > 0 ? ((converted / total) * 100).toFixed(1) : '0.0';
 
     res.json({
       success: true,
-      data: { total, newEnquiries, pendingFollowUps, converted, conversionRate },
+      data: { total, newEnquiries, pendingFollowUps, converted, conversionRate, unassignedCount },
     });
   } catch (error) {
     console.error('Stats error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch stats.' });
+  }
+}
+
+// ─── CRM: Manual Assign Enquiry ───────────────────────────────────────────────
+
+export async function assignEnquiryController(req: Request, res: Response): Promise<void> {
+  try {
+    const { id } = req.params;
+    const { employeeId, notes } = req.body;
+
+    if (!employeeId) {
+      res.status(400).json({ success: false, message: 'Employee ID is required for assignment.' });
+      return;
+    }
+
+    const access = await getEnquiryAccessContext(req);
+    if (!access.isSuperOrAdmin && !access.isSalesManager) {
+      res.status(403).json({ success: false, message: 'Access denied: Only managers and administrators can assign enquiries.' });
+      return;
+    }
+
+    const enquiry = await prisma.enquiry.findUnique({
+      where: { id: id as string },
+      include: {
+        assignments: { include: { employee: true } },
+        salesLead: true
+      }
+    });
+
+    if (!enquiry) {
+      res.status(404).json({ success: false, message: 'Enquiry not found.' });
+      return;
+    }
+
+    const targetEmployee = await prisma.employee.findUnique({
+      where: { id: employeeId },
+      include: { user: true }
+    });
+
+    if (!targetEmployee || targetEmployee.status !== 'ACTIVE') {
+      res.status(400).json({ success: false, message: 'Target sales employee does not exist or is inactive.' });
+      return;
+    }
+
+    const previousAssigneeName = enquiry.assignments?.[0]?.employee
+      ? `${enquiry.assignments[0].employee.firstName} ${enquiry.assignments[0].employee.lastName}`
+      : 'Unassigned';
+
+    const newAssigneeName = `${targetEmployee.firstName} ${targetEmployee.lastName}`;
+
+    // Concurrency safe assignment transaction
+    await prisma.$transaction(async (tx) => {
+      // 1. Clear existing assignments for this enquiry to prevent duplicates
+      await tx.enquiryAssignment.deleteMany({
+        where: { enquiryId: id as string }
+      });
+
+      // 2. Create new assignment
+      await tx.enquiryAssignment.create({
+        data: {
+          enquiryId: id as string,
+          employeeId: employeeId
+        }
+      });
+
+      // 3. Log into EnquiryStatusHistory
+      await tx.enquiryStatusHistory.create({
+        data: {
+          enquiryId: id as string,
+          oldStatus: enquiry.status,
+          newStatus: enquiry.status,
+          updatedById: req.user?.userId ?? null,
+          remarks: `Assigned from [${previousAssigneeName}] to [${newAssigneeName}] by Manager. ${notes ? 'Notes: ' + notes : ''}`.trim()
+        }
+      });
+    });
+
+    // 4. Synchronize linked SalesLead if one exists
+    if (enquiry.salesLead) {
+      await assignLeadManually(
+        enquiry.salesLead.id,
+        employeeId,
+        req.user?.userId || 'system',
+        `Synchronized from Enquiry manual assignment by Manager: ${newAssigneeName}`
+      ).catch((err) => console.error('SalesLead assignment sync warning:', err));
+    }
+
+    res.json({
+      success: true,
+      message: `Enquiry successfully assigned to ${newAssigneeName}.`,
+      data: {
+        enquiryId: id,
+        assignedTo: {
+          id: targetEmployee.id,
+          firstName: targetEmployee.firstName,
+          lastName: targetEmployee.lastName
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Assign enquiry error:', error);
+    res.status(500).json({ success: false, message: 'Failed to assign enquiry.' });
   }
 }
 
@@ -623,6 +980,12 @@ export async function getDashboardStats(req: Request, res: Response): Promise<vo
 export async function deleteEnquiry(req: Request, res: Response): Promise<void> {
   try {
     const { id } = req.params;
+
+    const access = await getEnquiryAccessContext(req);
+    if (!access.isSuperOrAdmin && !access.isSalesManager) {
+      res.status(403).json({ success: false, message: 'Access denied: Only managers and administrators can delete enquiries.' });
+      return;
+    }
 
     const existing = await prisma.enquiry.findUnique({
       where: { id: id as string },

@@ -13,10 +13,25 @@ import {
   RefreshCw,
   Eye,
   CheckCircle,
+  AlertCircle,
   MousePointerClick
 } from 'lucide-react';
 
 interface MetaAnalyticsData {
+  connections?: {
+    facebook: boolean;
+    instagram: boolean;
+    whatsapp: boolean;
+    adAccount: boolean;
+  };
+  deduplication?: {
+    isActive: boolean;
+    statusText: string;
+    hasPixel: boolean;
+    hasCapi: boolean;
+    totalProcessedEvents: number;
+  };
+  error?: string | null;
   summary: {
     facebookLeads: number;
     instagramLeads: number;
@@ -52,17 +67,31 @@ interface MetaAnalyticsData {
 
 
 function formatToINR(val: string | number | undefined | null): string {
-  if (val === undefined || val === null || val === '') return '₹0.00';
+  if (val === undefined || val === null || val === '') return 'No Data Available';
   if (typeof val === 'number') {
     return '₹' + val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
-  const str = String(val);
-  return str.replace(/\$?\s*([0-9]+(?:\.[0-9]+)?)\s*(?:USD)?/gi, (match, p1) => {
-    const num = parseFloat(p1);
-    if (isNaN(num)) return match;
-    return '₹' + num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  }).replace(/\$/g, '₹').replace(/\bUSD\b/gi, '').replace(/\s{2,}/g, ' ').trim();
+  let str = String(val).trim();
+  if (str.toUpperCase() === 'N/A') return 'N/A';
+  if (str.toLowerCase() === 'not connected') return 'Not Connected';
+  if (str.toLowerCase() === 'no data available') return 'No Data Available';
+
+  // Strip all existing currency symbols ($ and ₹) and USD labels
+  str = str.replace(/[₹$]/g, '').replace(/\bUSD\b/gi, '').trim();
+
+  // Find first number sequence
+  const match = str.match(/([0-9]+(?:\.[0-9]+)?)/);
+  if (!match || match.index === undefined) return str || 'No Data Available';
+
+  const rawNum = parseFloat(match[1]);
+  const formattedNum = isNaN(rawNum)
+    ? match[1]
+    : rawNum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  // Retain any additional text safely without replacing substrings multiple times
+  const remainder = str.slice(match.index + match[0].length).trim();
+  return ('₹' + formattedNum + (remainder ? ' ' + remainder : '')).trim();
 }
 
 export default function MetaAnalytics() {
@@ -78,6 +107,9 @@ export default function MetaAnalytics() {
   const campaigns = data?.data?.campaigns || [];
   const sources = data?.data?.leadSourceBreakdown || [];
   const pixelEvents = data?.data?.pixelConversions || [];
+  const connections = data?.data?.connections;
+  const deduplication = data?.data?.deduplication;
+  const apiError = data?.data?.error;
 
   return (
     <div className="p-4 sm:p-6 w-full min-w-0 md:p-8 space-y-8 max-w-7xl mx-auto">
@@ -88,6 +120,11 @@ export default function MetaAnalytics() {
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-700">
               Meta Ads & Conversions
             </span>
+            {connections && !connections.facebook && !connections.instagram && !connections.adAccount && (
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600">
+                Accounts Not Connected
+              </span>
+            )}
           </div>
           <h1 className="text-2xl font-black text-slate-900 mt-1">Meta Marketing & Lead Analytics</h1>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -105,6 +142,14 @@ export default function MetaAnalytics() {
         </button>
       </div>
 
+      {/* Error or Notice Alert if applicable */}
+      {apiError && (
+        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold flex items-center gap-2.5">
+          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+          <span>Meta API Notice: {apiError}</span>
+        </div>
+      )}
+
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-2xs">
@@ -115,8 +160,12 @@ export default function MetaAnalytics() {
             </div>
           </div>
           <div className="mt-3">
-            <span className="text-2xl font-black text-slate-900">{stats?.facebookLeads ?? 0}</span>
-            <span className="text-[11px] text-emerald-600 font-bold ml-2">Synced to CRM</span>
+            <span className="text-2xl font-black text-slate-900">
+              {connections?.facebook ? (stats?.facebookLeads ?? 0) : 0}
+            </span>
+            <span className={`text-[11px] font-bold ml-2 ${connections?.facebook ? 'text-emerald-600' : 'text-slate-400'}`}>
+              {connections?.facebook ? 'Synced to CRM' : 'Not Connected'}
+            </span>
           </div>
           <p className="text-[11px] text-slate-400 mt-1">Lead Ads Form submissions</p>
         </div>
@@ -129,8 +178,12 @@ export default function MetaAnalytics() {
             </div>
           </div>
           <div className="mt-3">
-            <span className="text-2xl font-black text-slate-900">{stats?.instagramLeads ?? 0}</span>
-            <span className="text-[11px] text-emerald-600 font-bold ml-2">Direct & Story Ads</span>
+            <span className="text-2xl font-black text-slate-900">
+              {connections?.instagram ? (stats?.instagramLeads ?? 0) : 0}
+            </span>
+            <span className={`text-[11px] font-bold ml-2 ${connections?.instagram ? 'text-emerald-600' : 'text-slate-400'}`}>
+              {connections?.instagram ? 'Direct & Story Ads' : 'Not Connected'}
+            </span>
           </div>
           <p className="text-[11px] text-slate-400 mt-1">Instagram sponsored inquiries</p>
         </div>
@@ -143,8 +196,12 @@ export default function MetaAnalytics() {
             </div>
           </div>
           <div className="mt-3">
-            <span className="text-2xl font-black text-slate-900">{stats?.whatsAppEnquiries ?? 0}</span>
-            <span className="text-[11px] text-emerald-600 font-bold ml-2">Cloud API</span>
+            <span className="text-2xl font-black text-slate-900">
+              {connections?.whatsapp ? (stats?.whatsAppEnquiries ?? 0) : 0}
+            </span>
+            <span className={`text-[11px] font-bold ml-2 ${connections?.whatsapp ? 'text-emerald-600' : 'text-slate-400'}`}>
+              {connections?.whatsapp ? 'Cloud API' : 'Not Connected'}
+            </span>
           </div>
           <p className="text-[11px] text-slate-400 mt-1">Inbound Click-to-Chat conversations</p>
         </div>
@@ -157,8 +214,10 @@ export default function MetaAnalytics() {
             </div>
           </div>
           <div className="mt-3">
-            <span className="text-2xl font-black text-slate-900">{formatToINR(stats?.costPerLead || '4.85')}</span>
-            <span className="text-[11px] text-blue-600 font-bold ml-2">{stats?.ctr || '4.37%'} CTR</span>
+            <span className="text-2xl font-black text-slate-900">{formatToINR(stats?.costPerLead)}</span>
+            {connections?.adAccount && stats?.ctr && (
+              <span className="text-[11px] text-blue-600 font-bold ml-2">{stats.ctr} CTR</span>
+            )}
           </div>
           <p className="text-[11px] text-slate-400 mt-1">From connected Meta Ad Accounts</p>
         </div>
@@ -176,39 +235,45 @@ export default function MetaAnalytics() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold">
-                <tr>
-                  <th className="px-4 py-3 rounded-l-xl">Campaign Name</th>
-                  <th className="px-3 py-3">Platform</th>
-                  <th className="px-3 py-3">Status</th>
-                  <th className="px-3 py-3">Leads</th>
-                  <th className="px-3 py-3">Spend</th>
-                  <th className="px-3 py-3 rounded-r-xl">Cost/Lead</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {campaigns.map((camp) => (
-                  <tr key={camp.id} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="px-4 py-3.5 font-bold text-slate-800">{camp.name}</td>
-                    <td className="px-3 py-3.5">
-                      <span className="px-2 py-0.5 rounded-md font-semibold text-[10px] bg-indigo-50 text-indigo-700">
-                        {camp.platform}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3.5">
-                      <span className="inline-flex items-center gap-1 text-emerald-600 font-bold text-[11px]">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                        {camp.status}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3.5 font-bold text-slate-900">{camp.leads}</td>
-                    <td className="px-3 py-3.5 text-slate-600">{formatToINR(camp.spend)}</td>
-                    <td className="px-3 py-3.5 font-bold text-blue-600">{formatToINR(camp.cpl)}</td>
+            {campaigns.length > 0 ? (
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold">
+                  <tr>
+                    <th className="px-4 py-3 rounded-l-xl">Campaign Name</th>
+                    <th className="px-3 py-3">Platform</th>
+                    <th className="px-3 py-3">Status</th>
+                    <th className="px-3 py-3">Leads</th>
+                    <th className="px-3 py-3">Spend</th>
+                    <th className="px-3 py-3 rounded-r-xl">Cost/Lead</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {campaigns.map((camp) => (
+                    <tr key={camp.id} className="hover:bg-slate-50/60 transition-colors">
+                      <td className="px-4 py-3.5 font-bold text-slate-800">{camp.name}</td>
+                      <td className="px-3 py-3.5">
+                        <span className="px-2 py-0.5 rounded-md font-semibold text-[10px] bg-indigo-50 text-indigo-700">
+                          {camp.platform}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <span className="inline-flex items-center gap-1 text-emerald-600 font-bold text-[11px]">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                          {camp.status}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3.5 font-bold text-slate-900">{camp.leads}</td>
+                      <td className="px-3 py-3.5 text-slate-600">{formatToINR(camp.spend)}</td>
+                      <td className="px-3 py-3.5 font-bold text-blue-600">{formatToINR(camp.cpl)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className="py-12 text-center text-slate-400 text-xs font-semibold">
+                {connections?.adAccount ? 'No Active Campaigns Found' : 'No Data Available (Meta Ad Account Not Connected)'}
+              </div>
+            )}
           </div>
         </div>
 
@@ -253,20 +318,37 @@ export default function MetaAnalytics() {
               Live funnel events recorded with dual-engine browser pixel & server-side CAPI deduplication.
             </p>
           </div>
-          <span className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-xs font-bold flex items-center gap-1.5">
-            <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Event Deduplication Active
+          <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 border ${
+            deduplication?.isActive
+              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+              : 'bg-slate-50 text-slate-600 border-slate-200'
+          }`}>
+            {deduplication?.isActive ? (
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+            ) : (
+              <AlertCircle className="w-3.5 h-3.5 text-slate-400" />
+            )}
+            {deduplication?.statusText || 'Deduplication Not Configured'}
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 pt-2">
-          {pixelEvents.map((pe, idx) => (
-            <div key={idx} className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/60 text-center">
-              <span className="text-[11px] font-bold text-slate-500 block truncate">{pe.event}</span>
-              <span className="text-lg font-black text-slate-900 block mt-1">{pe.count.toLocaleString()}</span>
-              <span className="text-[10px] text-emerald-600 font-semibold block mt-0.5">100% matched</span>
-            </div>
-          ))}
-        </div>
+        {pixelEvents.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 pt-2">
+            {pixelEvents.map((pe, idx) => (
+              <div key={idx} className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/60 text-center">
+                <span className="text-[11px] font-bold text-slate-500 block truncate">{pe.event}</span>
+                <span className="text-lg font-black text-slate-900 block mt-1">{pe.count.toLocaleString()}</span>
+                <span className="text-[10px] text-emerald-600 font-semibold block mt-0.5">100% matched</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="py-8 text-center text-slate-400 text-xs font-semibold">
+            {deduplication?.isActive
+              ? 'No Conversion Events Recorded Yet'
+              : 'No Data Available (Pixel and CAPI Not Active)'}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
+import { assignLeadAutomatically } from '../services/leadAssignmentService';
 import {
   getMetaConfig,
   updateMetaConfig,
@@ -11,6 +12,8 @@ import {
   sendWhatsAppMessageApi,
   sendConversionsApiEvent,
   META_GRAPH_API_VERSION,
+  fetchJson,
+  GRAPH_API_BASE,
 } from '../services/metaService';
 import { verifyMetaSignature, maskToken, decryptToken } from '../utils/metaCrypto';
 
@@ -524,10 +527,21 @@ async function processMetaLead(leadData: {
       return recentEnquiry;
     }
 
-    // 3. Generate Reference Number
-    let referenceNumber = generateRef();
+    // 3. Generate Reference Number (SIM- prefix for simulated sandbox leads, ENQ- for live)
+    const isSimulated = leadData.leadgenId?.startsWith('sim_');
+    const prefix = isSimulated ? 'SIM-' : 'ENQ-';
+    function generateLeadRef() {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let res = prefix;
+      for (let i = 0; i < 6; i++) {
+        res += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return res;
+    }
+
+    let referenceNumber = generateLeadRef();
     while (await prisma.enquiry.findUnique({ where: { referenceNumber } })) {
-      referenceNumber = generateRef();
+      referenceNumber = generateLeadRef();
     }
 
     // 4. Create Enquiry
@@ -543,37 +557,34 @@ async function processMetaLead(leadData: {
       }
     });
 
-    // 5. Automatic CRM Rule Assignment
-    const sysSettings = await prisma.systemSettings.findUnique({ where: { id: 'default' } });
-    if (sysSettings?.autoAssignEnquiries !== false) {
-      // Find least loaded sales employee or first active employee
-      const salesEmp = await prisma.employee.findFirst({
-        where: {
-          status: 'ACTIVE',
-          department: { name: { contains: 'Sales', mode: 'insensitive' } }
-        }
-      }) || await prisma.employee.findFirst({ where: { status: 'ACTIVE' } });
+    // 5. Hybrid Automatic CRM Lead Assignment
+    const pipelineStage = await prisma.salesPipelineStage.findFirst({
+      where: { name: 'New' }
+    });
 
-      if (salesEmp) {
-        await prisma.enquiryAssignment.create({
-          data: {
-            enquiryId: enquiry.id,
-            employeeId: salesEmp.id,
-          }
-        });
-
-        // Also create SalesLead
-        await prisma.salesLead.create({
-          data: {
-            title: `Meta Lead: ${destination} (${enquiry.referenceNumber})`,
-            source: enquiry.source,
-            status: 'NEW',
-            customerId: customer.id,
-            assignedToId: salesEmp.id,
-            enquiryId: enquiry.id,
-          }
-        });
+    const salesLead = await prisma.salesLead.create({
+      data: {
+        title: `Meta Lead: ${destination || 'General'} (${enquiry.referenceNumber})`,
+        source: enquiry.source,
+        status: 'NEW',
+        customerId: customer.id,
+        pipelineStageId: pipelineStage?.id || null,
+        enquiryId: enquiry.id,
       }
+    });
+
+    const assignResult = await assignLeadAutomatically(salesLead.id).catch((err) => {
+      console.error('Error auto-assigning Meta lead:', err);
+      return null;
+    });
+
+    if (assignResult?.assignedTo?.id) {
+      await prisma.enquiryAssignment.create({
+        data: {
+          enquiryId: enquiry.id,
+          employeeId: assignResult.assignedTo.id,
+        }
+      }).catch(() => {});
     }
 
     return enquiry;
@@ -820,89 +831,232 @@ export async function trackCapiEventController(req: Request, res: Response): Pro
  */
 export async function getMetaAnalyticsController(req: Request, res: Response): Promise<void> {
   try {
+    const config = await getMetaConfig();
+    const accounts = await listMetaAccounts();
+
+    const fbAccount = accounts.find(a => a.platform === 'FACEBOOK' && a.status === 'CONNECTED');
+    const igAccount = accounts.find(a => a.platform === 'INSTAGRAM' && a.status === 'CONNECTED');
+    const waAccount = accounts.find(a => a.platform === 'WHATSAPP' && a.status === 'CONNECTED');
+    const adAccount = accounts.find(a => a.platform === 'AD_ACCOUNT' && a.status === 'CONNECTED');
+
+    const isFbConnected = !!(fbAccount && fbAccount.accessToken && !fbAccount.accessToken.startsWith('EAA_DEMO_'));
+    const isIgConnected = !!(igAccount && igAccount.accessToken && !igAccount.accessToken.startsWith('EAA_DEMO_'));
+    const isWaConnected = !!(waAccount && waAccount.accessToken && !waAccount.accessToken.startsWith('EAA_DEMO_'));
+    const isAdAccountConnected = !!(adAccount && adAccount.accessToken && !adAccount.accessToken.startsWith('EAA_DEMO_'));
+
     let fbLeadsCount = 0;
     let igLeadsCount = 0;
     let waEnquiriesCount = 0;
     let totalMetaLeads = 0;
 
+    // Strict validation: Only count leads if the respective channel is verified and connected,
+    // and query only genuine webhook-verified Meta Leadgen events recorded by the integration.
     try {
-      const fbLeads = await prisma.enquiry.count({
-        where: { source: { contains: 'Facebook', mode: 'insensitive' } }
-      });
-      const igLeads = await prisma.enquiry.count({
-        where: { source: { contains: 'Instagram', mode: 'insensitive' } }
-      });
-      const waLeads = await prisma.enquiry.count({
-        where: { source: { contains: 'WhatsApp', mode: 'insensitive' } }
-      });
+      if (isFbConnected) {
+        fbLeadsCount = await prisma.enquiry.count({
+          where: {
+            source: 'Facebook Lead Ad',
+            referenceNumber: { not: { startsWith: 'SIM-' } }
+          }
+        });
+      }
 
-      fbLeadsCount = fbLeads;
-      igLeadsCount = igLeads;
-      waEnquiriesCount = waLeads;
+      if (isIgConnected) {
+        igLeadsCount = await prisma.enquiry.count({
+          where: {
+            source: 'Instagram Lead Ad',
+            referenceNumber: { not: { startsWith: 'SIM-' } }
+          }
+        });
+      }
+
+      if (isWaConnected) {
+        waEnquiriesCount = await prisma.enquiry.count({
+          where: {
+            source: 'WhatsApp Enquiry',
+            referenceNumber: { not: { startsWith: 'SIM-' } }
+          }
+        });
+      }
+
       totalMetaLeads = fbLeadsCount + igLeadsCount + waEnquiriesCount;
     } catch (e) {
-      fbLeadsCount = 28;
-      igLeadsCount = 14;
-      waEnquiriesCount = 37;
-      totalMetaLeads = fbLeadsCount + igLeadsCount + waEnquiriesCount;
+      console.error('Error querying DB enquiry counts for Meta Analytics:', e);
+      fbLeadsCount = 0;
+      igLeadsCount = 0;
+      waEnquiriesCount = 0;
+      totalMetaLeads = 0;
     }
 
-    const config = await getMetaConfig();
-    const isLive = Boolean(config?.isLive);
+    let campaigns: Array<{
+      id: string;
+      name: string;
+      platform: string;
+      status: string;
+      leads: number;
+      spend: string;
+      cpl: string;
+      conversions: number;
+    }> = [];
+
+    let totalSpend = 0;
+    let totalImpressions = 0;
+    let totalClicks = 0;
+    let adAccountError: string | null = null;
+
+    // If an Ad Account or Facebook Page is connected with live token, fetch real insights
+    const activeTokenAccount = adAccount || fbAccount;
+    if (activeTokenAccount && activeTokenAccount.accessToken && !activeTokenAccount.accessToken.startsWith('EAA_DEMO_')) {
+      try {
+        const rawToken = decryptToken(activeTokenAccount.accessToken);
+        const targetId = activeTokenAccount.accountId.startsWith('act_') ? activeTokenAccount.accountId : `act_${activeTokenAccount.accountId}`;
+        const campaignsUrl = `${GRAPH_API_BASE}/${targetId}/campaigns?fields=id,name,status,objective&access_token=${encodeURIComponent(rawToken)}`;
+        const campaignsRes = await fetchJson(campaignsUrl);
+
+        if (campaignsRes?.data && Array.isArray(campaignsRes.data)) {
+          for (const camp of campaignsRes.data) {
+            let campSpend = 0;
+            let campImpressions = 0;
+            let campClicks = 0;
+            let campLeads = 0;
+
+            try {
+              const insightsUrl = `${GRAPH_API_BASE}/${camp.id}/insights?fields=spend,impressions,clicks,actions&access_token=${encodeURIComponent(rawToken)}`;
+              const insRes = await fetchJson(insightsUrl);
+              const insData = insRes?.data?.[0];
+              if (insData) {
+                campSpend = parseFloat(insData.spend || '0') || 0;
+                campImpressions = parseInt(insData.impressions || '0', 10) || 0;
+                campClicks = parseInt(insData.clicks || '0', 10) || 0;
+
+                const leadAction = insData.actions?.find((a: any) => a.action_type === 'lead' || a.action_type === 'onsite_conversion.lead_grouped');
+                if (leadAction) {
+                  campLeads = parseInt(leadAction.value || '0', 10) || 0;
+                }
+
+                totalSpend += campSpend;
+                totalImpressions += campImpressions;
+                totalClicks += campClicks;
+              }
+            } catch (insErr: any) {
+              console.warn(`Failed to fetch insights for campaign ${camp.id}:`, insErr?.response?.data || insErr.message);
+            }
+
+            const cplValue = campLeads > 0 ? (campSpend / campLeads) : 0;
+            campaigns.push({
+              id: camp.id,
+              name: camp.name,
+              platform: 'FACEBOOK_IG',
+              status: camp.status || 'ACTIVE',
+              leads: campLeads,
+              spend: '₹' + campSpend.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+              cpl: campLeads > 0 ? '₹' + cplValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A',
+              conversions: campLeads,
+            });
+          }
+        }
+      } catch (err: any) {
+        adAccountError = err?.response?.data?.error?.message || err.message || 'Error fetching Meta Ad Insights';
+        console.error('Error fetching live Meta Ad Campaigns:', adAccountError);
+      }
+    }
+
+    // Lead source breakdown based strictly on real DB counts
+    const leadSourceBreakdown = [
+      {
+        source: 'Facebook Lead Ads',
+        count: fbLeadsCount,
+        percentage: totalMetaLeads > 0 ? Math.round((fbLeadsCount / totalMetaLeads) * 100) : 0
+      },
+      {
+        source: 'Instagram Direct / Stories',
+        count: igLeadsCount,
+        percentage: totalMetaLeads > 0 ? Math.round((igLeadsCount / totalMetaLeads) * 100) : 0
+      },
+      {
+        source: 'WhatsApp Click-to-Chat',
+        count: waEnquiriesCount,
+        percentage: totalMetaLeads > 0 ? Math.round((waEnquiriesCount / totalMetaLeads) * 100) : 0
+      },
+    ];
+
+    // Real CAPI and deduplicated events from MetaProcessedEvent table
+    let pixelConversions: Array<{ event: string; count: number }> = [];
+    let deduplicationEventCount = 0;
+    try {
+      const eventGroup = await prisma.metaProcessedEvent.groupBy({
+        by: ['eventType'],
+        _count: {
+          id: true,
+        }
+      });
+
+      pixelConversions = eventGroup.map(eg => ({
+        event: eg.eventType,
+        count: eg._count.id,
+      }));
+
+      deduplicationEventCount = pixelConversions.reduce((acc, curr) => acc + curr.count, 0);
+    } catch (dbErr) {
+      console.warn('Unable to query MetaProcessedEvent for conversions:', dbErr);
+      pixelConversions = [];
+      deduplicationEventCount = 0;
+    }
+
+    const hasRealPixelConfig = Boolean(config?.pixelId && config.trackPixel);
+    const hasRealCapiConfig = Boolean(
+      config?.trackCapi &&
+      config.capiAccessToken &&
+      !decryptToken(config.capiAccessToken).startsWith('EAA_DEMO_')
+    );
+    const isDeduplicationActive = Boolean(hasRealPixelConfig && hasRealCapiConfig);
+
+    // Summary calculation
+    const overallCtr = totalImpressions > 0
+      ? ((totalClicks / totalImpressions) * 100).toFixed(2) + '%'
+      : '0.00%';
+
+    const costPerLeadDisplay = fbLeadsCount > 0 && totalSpend > 0
+      ? '₹' + (totalSpend / fbLeadsCount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : (isAdAccountConnected ? 'N/A' : 'Not Connected');
+
+    const spendDisplay = isAdAccountConnected
+      ? '₹' + totalSpend.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : 'Not Connected';
 
     res.status(200).json({
       success: true,
       data: {
-        isLiveMode: isLive,
-        modeNotice: isLive ? 'Live Production Connected Data' : 'Sandbox Demo Mode (Client Meta Account Pending)',
+        isLiveMode: Boolean(config?.isLive),
+        connections: {
+          facebook: isFbConnected,
+          instagram: isIgConnected,
+          whatsapp: isWaConnected,
+          adAccount: isAdAccountConnected,
+        },
+        deduplication: {
+          isActive: isDeduplicationActive,
+          statusText: isDeduplicationActive ? 'Event Deduplication Active' : 'Deduplication Not Configured',
+          hasPixel: hasRealPixelConfig,
+          hasCapi: hasRealCapiConfig,
+          totalProcessedEvents: deduplicationEventCount,
+        },
+        error: adAccountError,
         summary: {
           facebookLeads: fbLeadsCount,
           instagramLeads: igLeadsCount,
           whatsAppEnquiries: waEnquiriesCount,
           totalMetaLeads: totalMetaLeads,
-          conversionsCount: isLive ? totalMetaLeads : 42,
-          costPerLead: isLive ? (fbLeadsCount > 0 ? ('₹' + (380 / fbLeadsCount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : 'N/A') : '₹4.85 (Simulated)',
-          spend: isLive ? '₹0.00' : '₹383.15 (Simulated)',
-          impressions: isLive ? 0 : 48920,
-          clicks: isLive ? 0 : 2140,
-          ctr: isLive ? '0.00%' : '4.37%',
+          conversionsCount: deduplicationEventCount,
+          costPerLead: costPerLeadDisplay,
+          spend: spendDisplay,
+          impressions: totalImpressions,
+          clicks: totalClicks,
+          ctr: overallCtr,
         },
-        campaigns: [
-          {
-            id: 'camp_001',
-            name: 'Sri Lanka Ceylon Tea Trail Promo - Q4',
-            platform: 'FACEBOOK_IG',
-            status: 'ACTIVE',
-            leads: 45,
-            spend: '₹210.00',
-            cpl: '₹4.66',
-            conversions: 18,
-          },
-          {
-            id: 'camp_002',
-            name: 'Direct WhatsApp Safari Discovery Ads',
-            platform: 'WHATSAPP',
-            status: 'ACTIVE',
-            leads: 34,
-            spend: '₹173.15',
-            cpl: '₹5.09',
-            conversions: 24,
-          }
-        ],
-        leadSourceBreakdown: [
-          { source: 'Facebook Lead Ads', count: fbLeadsCount || 28, percentage: 35 },
-          { source: 'Instagram Direct / Stories', count: igLeadsCount || 14, percentage: 18 },
-          { source: 'WhatsApp Click-to-Chat', count: waEnquiriesCount || 37, percentage: 47 },
-        ],
-        pixelConversions: [
-          { event: 'PageView', count: 1420 },
-          { event: 'ViewContent', count: 890 },
-          { event: 'Search', count: 412 },
-          { event: 'Contact', count: 188 },
-          { event: 'Lead', count: 115 },
-          { event: 'InitiateCheckout', count: 68 },
-          { event: 'Purchase', count: 32 },
-        ]
+        campaigns,
+        leadSourceBreakdown,
+        pixelConversions,
       }
     });
   } catch (error: any) {

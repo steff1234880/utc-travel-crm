@@ -1,11 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { Activity, DollarSign, Users, Briefcase, TrendingUp, XCircle } from 'lucide-react';
+import { Activity, DollarSign, Users, Briefcase, TrendingUp, XCircle, Layers } from 'lucide-react';
 import api from '../../../services/api';
 import QuickAttendanceWidget from '../../../components/admin/QuickAttendanceWidget';
+import LeadAssignmentOverviewModal from '../../../components/admin/crm/LeadAssignmentOverviewModal';
+import { useAuth } from '../../../context/AuthContext';
 
 const SalesDashboard = () => {
+  const { hasRole, hasPermission } = useAuth();
   const [metrics, setMetrics] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isOverviewOpen, setIsOverviewOpen] = useState(false);
+
+  const canManageSettings = hasRole(['CEO / Super Admin', 'Admin', 'ADMIN', 'SUPER_ADMIN']);
+  const canAssignLeads = hasRole(['Sales Manager', 'CEO / Super Admin', 'Admin', 'ADMIN', 'SUPER_ADMIN']) ||
+    hasPermission('sales_crm:manage') ||
+    hasPermission('sales_crm:assign');
 
   useEffect(() => {
     fetchMetrics();
@@ -31,6 +40,15 @@ const SalesDashboard = () => {
           <h1 className="text-3xl font-bold text-gray-900">Sales Dashboard</h1>
           <p className="text-sm text-gray-500 mt-1">Real-time overview of pipeline, leads, and sales conversion.</p>
         </div>
+        {canAssignLeads && (
+          <button
+            onClick={() => setIsOverviewOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-white text-slate-700 border border-slate-200 rounded-xl hover:bg-slate-50 text-xs font-bold shadow-2xs transition-colors self-start sm:self-auto"
+          >
+            <Users className="w-4 h-4 text-blue-600" />
+            <span>Lead Assignment Overview</span>
+          </button>
+        )}
       </div>
 
       {/* Employee Attendance Check-In / Check-Out Controls */}
@@ -119,6 +137,14 @@ const SalesDashboard = () => {
           </div>
         )}
       </div>
+
+      <LeadAssignmentOverviewModal
+        isOpen={isOverviewOpen}
+        onClose={() => setIsOverviewOpen(false)}
+        canManageSettings={canManageSettings}
+        canAssignLeads={canAssignLeads}
+        onWorkloadChanged={fetchMetrics}
+      />
     </div>
   );
 };

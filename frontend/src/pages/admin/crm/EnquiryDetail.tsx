@@ -4,10 +4,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
 import { 
   ArrowLeft, User, Phone, Mail, Calendar, MapPin, DollarSign, Clock, 
-  MessageCircle, Plus, CheckCircle2, XCircle, AlertCircle, Edit, Check, Trash2, Activity 
+  MessageCircle, Plus, CheckCircle2, XCircle, AlertCircle, Edit, Check, Trash2, Activity, UserCheck 
 } from 'lucide-react';
 import { Timeline, TimelineEvent } from '../../../components/common/Timeline';
 import { timelineService } from '../../../services/timelineService';
+import { useAuth } from '../../../context/AuthContext';
+import EnquiryAssignmentModal from '../../../components/admin/crm/EnquiryAssignmentModal';
 
 interface FollowUpItem {
   id: string;
@@ -42,7 +44,13 @@ interface EnquiryDetailData {
     whatsappNumber?: string;
   };
   package?: { title: string; slug: string; basePrice?: number; currency?: string } | null;
-  assignments: Array<{ employee: { firstName: string; lastName: string } }>;
+  assignments: Array<{ employee: { id: string; firstName: string; lastName: string } }>;
+  salesLead?: {
+    id: string;
+    assignedToId?: string | null;
+    assignmentType?: string | null;
+    assignedTo?: { id: string; firstName: string; lastName: string } | null;
+  } | null;
   notes: Array<{ id: string; text: string; createdAt: string; authorId: string }>;
   followUps: FollowUpItem[];
   statusHistory: Array<{ id: string; oldStatus?: string; newStatus: string; createdAt: string; remarks?: string }>;
@@ -52,11 +60,18 @@ export default function EnquiryDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { hasRole, hasPermission } = useAuth();
 
   const [isFollowUpModalOpen, setIsFollowUpModalOpen] = useState(false);
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
   const [isEditFollowUpMode, setIsEditFollowUpMode] = useState(false);
   const [editingFollowUpId, setEditingFollowUpId] = useState<string | null>(null);
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+
+  const canManageAssignments =
+    hasRole(['CEO / Super Admin', 'SUPER_ADMIN', 'CEO', 'Admin', 'ADMIN', 'Sales Manager', 'SALES_MANAGER']) ||
+    hasPermission('enquiries:manage') ||
+    hasPermission('sales_crm:manage');
 
   // Delete modal states
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -398,6 +413,68 @@ export default function EnquiryDetail() {
         {/* Right Column: Follow-ups, Assignments, Notes */}
         <div className="w-full md:w-1/3 space-y-6">
           
+          {/* Assignment Ownership Card */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <UserCheck className="w-4 h-4 text-blue-600" />
+                <span>Assigned Sales Executive</span>
+              </h3>
+              {canManageAssignments && (
+                <button
+                  onClick={() => setIsAssignModalOpen(true)}
+                  className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline"
+                >
+                  {enquiry.assignments?.length || enquiry.salesLead?.assignedTo ? 'Reassign' : 'Assign'}
+                </button>
+              )}
+            </div>
+
+            {enquiry.assignments && enquiry.assignments.length > 0 && enquiry.assignments[0].employee ? (
+              <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-900 text-sm">
+                    {enquiry.assignments[0].employee.firstName} {enquiry.assignments[0].employee.lastName}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800">
+                    Enquiry Assignee
+                  </span>
+                </div>
+                {enquiry.salesLead?.assignedTo && (
+                  <p className="text-[11px] text-slate-500">
+                    Synchronized Lead: {enquiry.salesLead.assignedTo.firstName} {enquiry.salesLead.assignedTo.lastName}
+                  </p>
+                )}
+              </div>
+            ) : enquiry.salesLead?.assignedTo ? (
+              <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-900 text-sm">
+                    {enquiry.salesLead.assignedTo.firstName} {enquiry.salesLead.assignedTo.lastName}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800">
+                    {enquiry.salesLead.assignmentType === 'AUTO' ? 'Auto-Assigned Lead' : 'Lead Assignee'}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-4 text-center space-y-2">
+                <p className="text-xs font-bold text-amber-800">Currently Unassigned</p>
+                <p className="text-[11px] text-amber-600">
+                  This enquiry is currently in the Sales Manager unassigned queue.
+                </p>
+                {canManageAssignments && (
+                  <button
+                    onClick={() => setIsAssignModalOpen(true)}
+                    className="mt-1 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold shadow-2xs transition-colors"
+                  >
+                    Assign to Executive
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Follow-ups Card */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
@@ -723,6 +800,26 @@ export default function EnquiryDetail() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Enquiry Assignment Modal */}
+      {isAssignModalOpen && (
+        <EnquiryAssignmentModal
+          isOpen={isAssignModalOpen}
+          onClose={() => setIsAssignModalOpen(false)}
+          onSuccess={() => {
+            setFeedback({ type: 'success', message: 'Enquiry assigned successfully.' });
+            refetch();
+            queryClient.invalidateQueries({ queryKey: ['enquiries'] });
+            queryClient.invalidateQueries({ queryKey: ['enquiry-stats'] });
+          }}
+          enquiry={{
+            id: enquiry.id,
+            referenceNumber: enquiry.referenceNumber,
+            customer: enquiry.customer,
+            currentAssignee: enquiry.assignments?.[0]?.employee || enquiry.salesLead?.assignedTo || null,
+          }}
+        />
       )}
 
     </div>

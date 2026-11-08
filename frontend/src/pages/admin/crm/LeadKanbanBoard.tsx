@@ -1,17 +1,28 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../../services/api';
-import { Plus, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Edit2, Trash2, Users, UserCheck, ArrowRightLeft } from 'lucide-react';
 import NewLeadModal from '../../../components/admin/crm/NewLeadModal';
 import EditLeadModal from '../../../components/admin/crm/EditLeadModal';
+import LeadAssignmentOverviewModal from '../../../components/admin/crm/LeadAssignmentOverviewModal';
+import LeadAssignmentModal from '../../../components/admin/crm/LeadAssignmentModal';
+import { useAuth } from '../../../context/AuthContext';
 
 const LeadKanbanBoard = () => {
   const navigate = useNavigate();
+  const { user, hasRole, hasPermission } = useAuth();
   const [stages, setStages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<any>(null);
+  const [isOverviewOpen, setIsOverviewOpen] = useState(false);
+  const [assigningLead, setAssigningLead] = useState<any>(null);
+
+  const canManageSettings = hasRole(['CEO / Super Admin', 'Admin', 'ADMIN', 'SUPER_ADMIN']);
+  const canAssignLeads = hasRole(['Sales Manager', 'CEO / Super Admin', 'Admin', 'ADMIN', 'SUPER_ADMIN']) ||
+    hasPermission('sales_crm:manage') ||
+    hasPermission('sales_crm:assign');
 
   useEffect(() => {
     fetchPipeline();
@@ -65,13 +76,27 @@ const LeadKanbanBoard = () => {
   return (
     <div className="p-6 h-full flex flex-col">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Sales Pipeline</h1>
-        <button 
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-        >
-          <Plus className="w-4 h-4" /> New Lead
-        </button>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Sales Pipeline</h1>
+          <p className="text-xs text-gray-500 mt-0.5">Manage pipeline stages and automatic executive assignments</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {canAssignLeads && (
+            <button
+              onClick={() => setIsOverviewOpen(true)}
+              className="flex items-center gap-2 px-3.5 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 text-sm font-semibold shadow-2xs transition-colors"
+            >
+              <Users className="w-4 h-4 text-blue-600" />
+              <span>Assignment Overview</span>
+            </button>
+          )}
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-semibold shadow-2xs transition-colors"
+          >
+            <Plus className="w-4 h-4" /> New Lead
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-x-auto">
@@ -104,6 +129,18 @@ const LeadKanbanBoard = () => {
                     className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm cursor-pointer hover:border-blue-300 hover:shadow-md transition-all relative group"
                   >
                     <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {canAssignLeads && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAssigningLead(lead);
+                          }}
+                          className="text-gray-400 hover:text-blue-600"
+                          title={lead.assignedToId ? 'Reassign Lead' : 'Assign Lead'}
+                        >
+                          <ArrowRightLeft className="w-4 h-4" />
+                        </button>
+                      )}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -123,16 +160,42 @@ const LeadKanbanBoard = () => {
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-                    <h4 className="font-medium text-gray-900 mb-1 pr-12">{lead.title}</h4>
-                    <p className="text-sm text-gray-500 mb-3">{lead.customer?.firstName} {lead.customer?.lastName}</p>
+                    <h4 className="font-medium text-gray-900 mb-1 pr-16">{lead.title}</h4>
+                    <p className="text-sm text-gray-500 mb-2">{lead.customer?.firstName} {lead.customer?.lastName}</p>
+
+                    {/* Assignee Pill */}
+                    <div className="flex items-center justify-between text-xs my-2">
+                      {lead.assignedTo ? (
+                        <div className="flex items-center gap-1.5 text-slate-700 bg-slate-100/80 px-2 py-0.5 rounded-md font-medium text-[11px]">
+                          <div className="w-3.5 h-3.5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[9px] font-bold">
+                            {lead.assignedTo.firstName?.[0]}
+                          </div>
+                          <span className="truncate max-w-[130px]">
+                            {lead.assignedTo.firstName} {lead.assignedTo.lastName}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                          Unassigned
+                        </span>
+                      )}
+
+                      {lead.assignmentType && lead.assignedTo && (
+                        <span className={`text-[10px] font-semibold ${
+                          lead.assignmentType === 'AUTOMATIC' ? 'text-emerald-600' : 'text-blue-600'
+                        }`}>
+                          {lead.assignmentType === 'AUTOMATIC' ? 'Auto' : 'Manual'}
+                        </span>
+                      )}
+                    </div>
                     
-                    <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-100">
+                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
                       <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded">
                         {lead.priority}
                       </span>
                       {lead.expectedValue && (
                         <span className="text-sm font-semibold text-gray-700">
-                          ${lead.expectedValue.toLocaleString()}
+                          ₹{lead.expectedValue.toLocaleString()}
                         </span>
                       )}
                     </div>
@@ -163,6 +226,22 @@ const LeadKanbanBoard = () => {
           fetchPipeline();
         }}
         lead={editingLead}
+      />
+      <LeadAssignmentOverviewModal
+        isOpen={isOverviewOpen}
+        onClose={() => setIsOverviewOpen(false)}
+        canManageSettings={canManageSettings}
+        canAssignLeads={canAssignLeads}
+        onWorkloadChanged={fetchPipeline}
+      />
+      <LeadAssignmentModal
+        isOpen={!!assigningLead}
+        onClose={() => setAssigningLead(null)}
+        onSuccess={() => {
+          setAssigningLead(null);
+          fetchPipeline();
+        }}
+        lead={assigningLead}
       />
     </div>
   );

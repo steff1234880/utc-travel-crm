@@ -8,20 +8,21 @@ datasource db {
 }
 
 model User {
-  id              String          @id @default(uuid())
-  email           String          @unique
-  passwordHash    String
-  isActive        Boolean         @default(true)
-  lastLogin       DateTime?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  roleId          String?
-  blogPosts       BlogPost[]
-  employee        Employee?
-  role            Role?           @relation(fields: [roleId], references: [id])
-  auditLogs       AuditLog[]
-  loginActivities LoginActivity[]
-  notifications   Notification[]
+  id                  String                  @id @default(uuid())
+  email               String                  @unique
+  passwordHash        String
+  isActive            Boolean                 @default(true)
+  lastLogin           DateTime?
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  roleId              String?
+  blogPosts           BlogPost[]
+  employee            Employee?
+  role                Role?                   @relation(fields: [roleId], references: [id])
+  auditLogs           AuditLog[]
+  loginActivities     LoginActivity[]
+  notifications       Notification[]
+  leadAssignmentsMade LeadAssignmentHistory[]
 }
 
 model Role {
@@ -121,6 +122,8 @@ model Employee {
   targets                       EmployeeTarget[]
   leaveRequests                 LeaveRequest[]
   leaveBalances                 EmployeeLeaveBalance[]
+  leadAssignmentsReceived       LeadAssignmentHistory[]     @relation("LeadAssignedToEmployee")
+  leadAssignmentsPrevious       LeadAssignmentHistory[]     @relation("LeadPreviousAssignee")
 }
 
 model EmployeeDocument {
@@ -445,7 +448,7 @@ model HomepageContent {
   mapSubtitle      String   @default("Interactive map highlighting our signature destinations, luxury tours, and exclusive packages.")
   mapActive        Boolean  @default(true)
   mapImage         String?
-    dynamicSections  Json?
+  dynamicSections  Json?
   updatedAt        DateTime @updatedAt
 }
 
@@ -498,8 +501,8 @@ model TravelPackage {
   priceType       String                @default("FIXED")
   heroImage       String?
   highlightsVideo String?
-  mapImage         String?
-    dynamicSections  Json?
+  mapImage        String?
+  dynamicSections Json?
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
   crmEnquiries    Enquiry[]
@@ -601,20 +604,20 @@ model PackageExclusion {
 }
 
 model PackagePricing {
-  id               String         @id @default(uuid())
-  title            String
-  price            Float
-  adultPrice       Float          @default(0)
-  child6to17Price  Float          @default(0)
-  child2to5Price   Float          @default(0)
-  infantPrice      Float          @default(0)
-  currency         String         @default("INR")
-  packageId        String?
-  package          TravelPackage? @relation(fields: [packageId], references: [id], onDelete: Cascade)
-  tourId           String?
-  tour             Tour?          @relation(fields: [tourId], references: [id], onDelete: Cascade)
-  groupTourId      String?
-  groupTour        GroupTour?     @relation(fields: [groupTourId], references: [id], onDelete: Cascade)
+  id              String         @id @default(uuid())
+  title           String
+  price           Float
+  adultPrice      Float          @default(0)
+  child6to17Price Float          @default(0)
+  child2to5Price  Float          @default(0)
+  infantPrice     Float          @default(0)
+  currency        String         @default("INR")
+  packageId       String?
+  package         TravelPackage? @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  tourId          String?
+  tour            Tour?          @relation(fields: [tourId], references: [id], onDelete: Cascade)
+  groupTourId     String?
+  groupTour       GroupTour?     @relation(fields: [groupTourId], references: [id], onDelete: Cascade)
 }
 
 model PackageAvailability {
@@ -674,16 +677,39 @@ model SalesLead {
   assignedToId String?
   assignedTo   Employee? @relation(fields: [assignedToId], references: [id])
 
+  assignmentType String    @default("UNASSIGNED") // "AUTOMATIC", "MANUAL", "UNASSIGNED"
+  assignedAt     DateTime?
+
   enquiryId String?  @unique
   enquiry   Enquiry? @relation(fields: [enquiryId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  requirements CustomerRequirement?
-  quotations   Quotation[]
-  activities   SalesActivity[]
-  followUps    FollowUp[]           @relation("LeadFollowUps")
+  requirements        CustomerRequirement?
+  quotations          Quotation[]
+  activities          SalesActivity[]
+  followUps           FollowUp[]              @relation("LeadFollowUps")
+  assignmentHistories LeadAssignmentHistory[]
+}
+
+model LeadAssignmentHistory {
+  id                 String    @id @default(uuid())
+  salesLeadId        String
+  salesLead          SalesLead @relation(fields: [salesLeadId], references: [id], onDelete: Cascade)
+  assignedToId       String?
+  assignedTo         Employee? @relation("LeadAssignedToEmployee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  previousAssigneeId String?
+  previousAssignee   Employee? @relation("LeadPreviousAssignee", fields: [previousAssigneeId], references: [id], onDelete: SetNull)
+  assignedById       String?
+  assignedBy         User?     @relation(fields: [assignedById], references: [id], onDelete: SetNull)
+  assignmentType     String    @default("AUTOMATIC") // AUTOMATIC, MANUAL
+  reason             String?
+  createdAt          DateTime  @default(now())
+
+  @@index([salesLeadId])
+  @@index([assignedToId])
+  @@index([createdAt])
 }
 
 model CustomerRequirement {
@@ -1459,25 +1485,27 @@ model SecuritySettings {
 }
 
 model SystemSettings {
-  id                   String   @id @default("default")
-  companyName          String   @default("UTC Travel & Tourism")
-  supportEmail         String   @default("support@utctravel.com")
-  supportPhone         String   @default("+1 (800) 555-UTC1")
-  whatsappNumber       String?
-  currency             String   @default("USD")
-  timezone             String   @default("UTC+03:00")
-  notificationsEnabled Boolean  @default(true)
-  autoAssignEnquiries  Boolean  @default(true)
-  officeStartTime      String   @default("09:30")
-  officeEndTime        String   @default("18:30")
-  breakStartTime       String?  @default("13:00")
-  breakEndTime         String?  @default("14:00")
-  gracePeriodMins      Int      @default(15)
-  workingDays          String   @default("1,2,3,4,5")
-  halfDayHours         Float    @default(4.5)
-  fullDayMinHours      Float    @default(8.0)
-  overtimeMinHours     Float    @default(9.5)
-  updatedAt            DateTime @updatedAt
+  id                     String   @id @default("default")
+  companyName            String   @default("UTC Travel & Tourism")
+  supportEmail           String   @default("support@utctravel.com")
+  supportPhone           String   @default("+1 (800) 555-UTC1")
+  whatsappNumber         String?
+  currency               String   @default("USD")
+  timezone               String   @default("UTC+03:00")
+  notificationsEnabled   Boolean  @default(true)
+  autoAssignEnquiries    Boolean  @default(true)
+  autoAssignLeads        Boolean  @default(true)
+  lastAssignedLeadExecId String?
+  officeStartTime        String   @default("09:30")
+  officeEndTime          String   @default("18:30")
+  breakStartTime         String?  @default("13:00")
+  breakEndTime           String?  @default("14:00")
+  gracePeriodMins        Int      @default(15)
+  workingDays            String   @default("1,2,3,4,5")
+  halfDayHours           Float    @default(4.5)
+  fullDayMinHours        Float    @default(8.0)
+  overtimeMinHours       Float    @default(9.5)
+  updatedAt              DateTime @updatedAt
 }
 
 model ContactEnquiry {
@@ -1506,40 +1534,40 @@ model TourPricingTier {
 }
 
 model FooterContent {
-  id               String   @id @default("default")
-  companyBio       String   @default("We craft unforgettable journeys with exceptional experiences at every step. From luxury customized escapes to guided group departures across Sri Lanka and global destinations.")
-  logoText         String   @default("UTC")
-  logoSubtext      String   @default("Ultimate Travel Companion")
-  address          String?
-  supportPhone     String?
-  whatsappNumber   String?
-  supportEmail     String?
-  facebookUrl      String?
-  instagramUrl     String?
-  youtubeUrl       String?
-  twitterUrl       String?
-  linkedinUrl      String?
-  copyrightText    String   @default("© 2026 Ultimate Travel Companion (UTC). All rights reserved.")
-  navColumns       Json?    
-  updatedAt        DateTime @updatedAt
+  id             String   @id @default("default")
+  companyBio     String   @default("We craft unforgettable journeys with exceptional experiences at every step. From luxury customized escapes to guided group departures across Sri Lanka and global destinations.")
+  logoText       String   @default("UTC")
+  logoSubtext    String   @default("Ultimate Travel Companion")
+  address        String?
+  supportPhone   String?
+  whatsappNumber String?
+  supportEmail   String?
+  facebookUrl    String?
+  instagramUrl   String?
+  youtubeUrl     String?
+  twitterUrl     String?
+  linkedinUrl    String?
+  copyrightText  String   @default("© 2026 Ultimate Travel Companion (UTC). All rights reserved.")
+  navColumns     Json?
+  updatedAt      DateTime @updatedAt
 }
 
 model PackagesPageContent {
-  id               String   @id @default("default")
-  heroTitle        String   @default("Our Curated Packages")
-  heroSubtitle     String   @default("Explore our exclusive travel packages and find your next adventure.")
-  heroImage        String   @default("https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?q=80&w=1600")
-  heroActive       Boolean  @default(true)
-  dynamicSections  Json?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id              String   @id @default("default")
+  heroTitle       String   @default("Our Curated Packages")
+  heroSubtitle    String   @default("Explore our exclusive travel packages and find your next adventure.")
+  heroImage       String   @default("https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?q=80&w=1600")
+  heroActive      Boolean  @default(true)
+  dynamicSections Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 model EmployeeAttendance {
   id           String    @id @default(uuid())
   employeeId   String
   date         DateTime  @db.Date
-  status       String    // PRESENT, ABSENT, LATE, HALF_DAY
+  status       String // PRESENT, ABSENT, LATE, HALF_DAY
   checkInTime  DateTime?
   checkOutTime DateTime?
   workingHours Float?
@@ -1556,17 +1584,17 @@ model EmployeeAttendance {
 }
 
 model EmployeeTarget {
-  id              String   @id @default(uuid())
-  employeeId      String
-  month           Int      // 1 - 12
-  year            Int      // e.g. 2026
-  targetType      String   // SALES_REVENUE, BOOKINGS_COUNT, LEADS_CONVERTED, TASKS_COMPLETED
-  targetValue     Float
-  achievedValue   Float?   @default(0)
-  unit            String   @default("COUNT") // COUNT, CURRENCY
-  notes           String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id            String   @id @default(uuid())
+  employeeId    String
+  month         Int // 1 - 12
+  year          Int // e.g. 2026
+  targetType    String // SALES_REVENUE, BOOKINGS_COUNT, LEADS_CONVERTED, TASKS_COMPLETED
+  targetValue   Float
+  achievedValue Float?   @default(0)
+  unit          String   @default("COUNT") // COUNT, CURRENCY
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
@@ -1576,19 +1604,19 @@ model EmployeeTarget {
 }
 
 model LeaveRequest {
-  id           String    @id @default(uuid())
-  employeeId   String
-  leaveType    String    // CASUAL, SICK, EARNED, UNPAID, OTHER
-  startDate    DateTime  @db.Date
-  endDate      DateTime  @db.Date
-  daysCount    Float
-  reason       String
-  status       String    @default("PENDING") // PENDING, APPROVED, REJECTED, CANCELLED
-  actionById   String?
-  actionAt     DateTime?
-  actionNotes  String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id          String    @id @default(uuid())
+  employeeId  String
+  leaveType   String // CASUAL, SICK, EARNED, UNPAID, OTHER
+  startDate   DateTime  @db.Date
+  endDate     DateTime  @db.Date
+  daysCount   Float
+  reason      String
+  status      String    @default("PENDING") // PENDING, APPROVED, REJECTED, CANCELLED
+  actionById  String?
+  actionAt    DateTime?
+  actionNotes String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
@@ -1598,14 +1626,14 @@ model LeaveRequest {
 }
 
 model EmployeeLeaveBalance {
-  id           String   @id @default(uuid())
-  employeeId   String
-  year         Int      // e.g. 2026
-  leaveType    String   // CASUAL, SICK, EARNED
-  totalDays    Float    // allocated days per year (e.g. 12 Casual, 10 Sick, 15 Earned)
-  usedDays     Float    @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id         String   @id @default(uuid())
+  employeeId String
+  year       Int // e.g. 2026
+  leaveType  String // CASUAL, SICK, EARNED
+  totalDays  Float // allocated days per year (e.g. 12 Casual, 10 Sick, 15 Earned)
+  usedDays   Float    @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
@@ -1619,64 +1647,64 @@ model EmployeeLeaveBalance {
 // ==========================================
 
 model MetaConfig {
-  id                   String    @id @default("default")
-  appId                String?
-  appSecret            String?
-  verifyToken          String?   // Webhook challenge verification token
-  pixelId              String?
-  capiAccessToken      String?   // Conversions API system user token
-  testEventCode        String?   // Meta CAPI test code (e.g. TEST12345)
-  isLive               Boolean   @default(false)
-  autoSyncLeads        Boolean   @default(true)
-  trackPixel           Boolean   @default(true)
-  trackCapi            Boolean   @default(true)
-  lastSyncAt           DateTime?
-  webhookStatus        String    @default("INACTIVE") // ACTIVE, INACTIVE, ERROR
-  webhookLastError     String?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  id               String    @id @default("default")
+  appId            String?
+  appSecret        String?
+  verifyToken      String? // Webhook challenge verification token
+  pixelId          String?
+  capiAccessToken  String? // Conversions API system user token
+  testEventCode    String? // Meta CAPI test code (e.g. TEST12345)
+  isLive           Boolean   @default(false)
+  autoSyncLeads    Boolean   @default(true)
+  trackPixel       Boolean   @default(true)
+  trackCapi        Boolean   @default(true)
+  lastSyncAt       DateTime?
+  webhookStatus    String    @default("INACTIVE") // ACTIVE, INACTIVE, ERROR
+  webhookLastError String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 }
 
 model MetaAccount {
-  id                   String    @id @default(uuid())
-  platform             String    // FACEBOOK, INSTAGRAM, WHATSAPP, AD_ACCOUNT
-  accountId            String    // Meta Page ID, IG User ID, WABA ID, Act ID
-  accountName          String
-  status               String    @default("DISCONNECTED") // CONNECTED, DISCONNECTED, ERROR, EXPIRED
-  accessToken          String?   // Encrypted/Stored Page Access Token or System User Token
-  tokenExpiresAt       DateTime?
-  scope                String?
-  metadata             Json?     // Extra data like phone_number_id, waba_id, username
-  lastSyncAt           DateTime?
-  errorMessage         String?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  id             String    @id @default(uuid())
+  platform       String // FACEBOOK, INSTAGRAM, WHATSAPP, AD_ACCOUNT
+  accountId      String // Meta Page ID, IG User ID, WABA ID, Act ID
+  accountName    String
+  status         String    @default("DISCONNECTED") // CONNECTED, DISCONNECTED, ERROR, EXPIRED
+  accessToken    String? // Encrypted/Stored Page Access Token or System User Token
+  tokenExpiresAt DateTime?
+  scope          String?
+  metadata       Json? // Extra data like phone_number_id, waba_id, username
+  lastSyncAt     DateTime?
+  errorMessage   String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@unique([platform, accountId])
 }
 
 model MetaMessage {
-  id                   String    @id @default(uuid())
-  platform             String    // WHATSAPP, MESSENGER, INSTAGRAM
-  externalId           String?   @unique // Meta message ID (wamid.xxx or mid.xxx)
-  senderId             String    // Customer WhatsApp number / Page-scoped user ID (PSID)
-  senderName           String?
-  recipientId          String    // UTC Business Number ID or Page ID
-  direction            String    // INBOUND, OUTBOUND
-  type                 String    @default("TEXT") // TEXT, TEMPLATE, IMAGE, DOCUMENT
-  content              String
-  templateName         String?
-  status               String    @default("SENT") // SENT, DELIVERED, READ, FAILED
-  errorCode            String?
-  errorMessage         String?
-  enquiryId            String?
-  customerId           String?
-  rawPayload           Json?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  id           String   @id @default(uuid())
+  platform     String // WHATSAPP, MESSENGER, INSTAGRAM
+  externalId   String?  @unique // Meta message ID (wamid.xxx or mid.xxx)
+  senderId     String // Customer WhatsApp number / Page-scoped user ID (PSID)
+  senderName   String?
+  recipientId  String // UTC Business Number ID or Page ID
+  direction    String // INBOUND, OUTBOUND
+  type         String   @default("TEXT") // TEXT, TEMPLATE, IMAGE, DOCUMENT
+  content      String
+  templateName String?
+  status       String   @default("SENT") // SENT, DELIVERED, READ, FAILED
+  errorCode    String?
+  errorMessage String?
+  enquiryId    String?
+  customerId   String?
+  rawPayload   Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  enquiry              Enquiry?  @relation(fields: [enquiryId], references: [id], onDelete: SetNull)
-  customer             Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  enquiry  Enquiry?  @relation(fields: [enquiryId], references: [id], onDelete: SetNull)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
   @@index([platform, senderId])
   @@index([enquiryId])
@@ -1684,11 +1712,9 @@ model MetaMessage {
 }
 
 model MetaProcessedEvent {
-  id                   String    @id @default(uuid())
-  eventId              String    @unique // Meta leadgen_id or webhook event ID for deduplication
-  eventType            String    // LEADGEN, MESSAGE, STATUS, CAPI
-  processedAt          DateTime  @default(now())
-  payloadSummary       String?
+  id             String   @id @default(uuid())
+  eventId        String   @unique // Meta leadgen_id or webhook event ID for deduplication
+  eventType      String // LEADGEN, MESSAGE, STATUS, CAPI
+  processedAt    DateTime @default(now())
+  payloadSummary String?
 }
-
-

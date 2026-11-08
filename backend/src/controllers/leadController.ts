@@ -1,6 +1,13 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
 import { z } from 'zod';
+import {
+  assignLeadAutomatically,
+  assignLeadManually,
+  getAssignmentOverview,
+  getLeadAssignmentHistory,
+  setAutoAssignmentSetting
+} from '../services/leadAssignmentService';
 
 const createLeadSchema = z.object({
   title: z.string().min(2),
@@ -26,7 +33,8 @@ export const getLeads = async (req: Request, res: Response) => {
 
     // If user is Sales Executive, only show their leads
     const userRole = await prisma.role.findUnique({ where: { id: req.user!.roleId! } });
-    if (userRole?.name === 'SALES_EXECUTIVE') {
+    const normalizedRole = (userRole?.name || '').toUpperCase().trim();
+    if (normalizedRole === 'SALES_EXECUTIVE' || normalizedRole === 'SALES EXECUTIVE') {
       const employee = await prisma.employee.findUnique({ where: { userId: req.user!.userId } });
       if (employee) {
         where.assignedToId = employee.id;
@@ -105,6 +113,8 @@ export const createLead = async (req: Request, res: Response) => {
     const lead = await prisma.salesLead.create({ 
       data: {
         ...leadData,
+        assignmentType: leadData.assignedToId ? 'MANUAL' : 'UNASSIGNED',
+        assignedAt: leadData.assignedToId ? new Date() : null,
         pipelineStageId: actualPipelineStageId,
         requirements: destination ? {
           create: {
@@ -114,7 +124,24 @@ export const createLead = async (req: Request, res: Response) => {
       },
       include: { customer: true, pipelineStage: true, assignedTo: true, requirements: true }
     });
-    res.status(201).json({ success: true, data: lead });
+
+    // If an executive was manually specified during creation, log the manual assignment
+    if (leadData.assignedToId) {
+      await prisma.leadAssignmentHistory.create({
+        data: {
+          salesLeadId: lead.id,
+          assignedToId: leadData.assignedToId,
+          assignedById: req.user?.userId || null,
+          assignmentType: 'MANUAL',
+          reason: 'Manually assigned upon lead creation'
+        }
+      });
+      res.status(201).json({ success: true, data: lead });
+    } else {
+      // Trigger automatic assignment engine
+      const assignResult = await assignLeadAutomatically(lead.id);
+      res.status(201).json({ success: true, data: assignResult.lead, assignment: assignResult });
+    }
   } catch (error) {
     res.status(400).json({ success: false, error: 'Failed to create lead', details: error });
   }
@@ -406,5 +433,87 @@ export const deleteLead = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Failed to delete lead:', error);
     res.status(500).json({ success: false, error: 'Failed to delete lead' });
+  }
+};
+
+// --- HYBRID AUTOMATIC LEAD ASSIGNMENT CONTROLLERS ---
+
+export const getLeadAssignmentOverviewController = async (req: Request, res: Response) => {
+  try {
+    const overview = await getAssignmentOverview();
+    res.json({ success: true, data: overview });
+  } catch (error: any) {
+    console.error('Failed to get lead assignment overview:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to fetch assignment overview' });
+  }
+};
+
+const assignLeadBodySchema = z.object({
+  employeeId: z.string().uuid().nullable().optional(),
+  reason: z.string().optional()
+});
+
+export const assignLeadController = async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const body = assignLeadBodySchema.parse(req.body);
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const result = await assignLeadManually(id, body.employeeId || null, userId, body.reason);
+    res.json({ success: true, data: result.lead, history: result.history });
+  } catch (error: any) {
+    console.error('Failed to assign lead:', error);
+    res.status(400).json({ success: false, error: error.message || 'Failed to assign lead' });
+  }
+};
+
+export const getLeadAssignmentHistoryController = async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const history = await getLeadAssignmentHistory(id);
+    res.json({ success: true, data: history });
+  } catch (error: any) {
+    console.error('Failed to get lead assignment history:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to fetch assignment history' });
+  }
+};
+
+export const getAssignmentSettingsController = async (req: Request, res: Response) => {
+  try {
+    const settings = await prisma.systemSettings.findUnique({
+      where: { id: 'default' },
+      select: { autoAssignLeads: true, autoAssignEnquiries: true }
+    });
+    res.json({
+      success: true,
+      data: {
+        autoAssignLeads: settings?.autoAssignLeads ?? true,
+        autoAssignEnquiries: settings?.autoAssignEnquiries ?? true
+      }
+    });
+  } catch (error: any) {
+    console.error('Failed to get assignment settings:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch settings' });
+  }
+};
+
+const updateAssignmentSettingsSchema = z.object({
+  autoAssignLeads: z.boolean()
+});
+
+export const updateAssignmentSettingsController = async (req: Request, res: Response) => {
+  try {
+    const body = updateAssignmentSettingsSchema.parse(req.body);
+    const userId = req.user?.userId || 'system';
+
+    const result = await setAutoAssignmentSetting(body.autoAssignLeads, userId);
+    res.json({ success: true, data: result });
+  } catch (error: any) {
+    console.error('Failed to update assignment settings:', error);
+    res.status(400).json({ success: false, error: error.message || 'Failed to update settings' });
   }
 };

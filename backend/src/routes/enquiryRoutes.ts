@@ -8,9 +8,10 @@ import {
   scheduleFollowUp,
   updateFollowUp,
   getDashboardStats,
+  assignEnquiryController,
   deleteEnquiry,
 } from '../controllers/crmEnquiryController';
-import { authenticate, requireModuleAccess } from '../middleware/authMiddleware';
+import { authenticate, requireModuleAccess, authorizeRole } from '../middleware/authMiddleware';
 
 const router = Router();
 
@@ -24,6 +25,13 @@ router.get('/', authenticate, requireModuleAccess('Enquiries'), listEnquiries);
 router.get('/:id', authenticate, requireModuleAccess('Enquiries'), getEnquiryById);
 
 // ─── CRM Write Routes (protected) ─────────────────────────────────────────────
+router.post(
+  '/:id/assign',
+  authenticate,
+  requireModuleAccess('Enquiries'),
+  authorizeRole(['CEO / Super Admin', 'SUPER_ADMIN', 'CEO', 'Admin', 'ADMIN', 'Sales Manager', 'SALES_MANAGER']),
+  assignEnquiryController
+);
 router.patch('/:id/status', authenticate, requireModuleAccess('Enquiries'), updateEnquiryStatus);
 router.post('/:id/notes', authenticate, requireModuleAccess('Enquiries'), addNote);
 router.post('/:id/followups', authenticate, requireModuleAccess('Enquiries'), scheduleFollowUp);

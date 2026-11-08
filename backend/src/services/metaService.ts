@@ -4,7 +4,7 @@ import { decryptToken, encryptToken, hashForCapi } from '../utils/metaCrypto';
 export const META_GRAPH_API_VERSION = process.env.META_GRAPH_API_VERSION || 'v21.0';
 export const GRAPH_API_BASE = `https://graph.facebook.com/${META_GRAPH_API_VERSION}`;
 
-async function fetchJson(url: string, options: { method?: string; headers?: Record<string, string>; body?: string } = {}): Promise<any> {
+export async function fetchJson(url: string, options: { method?: string; headers?: Record<string, string>; body?: string } = {}): Promise<any> {
   const res = await fetch(url, {
     method: options.method || 'GET',
     headers: options.headers,
@@ -54,47 +54,7 @@ let inMemoryConfig: any = {
   webhookLastError: null,
 };
 
-let inMemoryAccounts: any[] = [
-  {
-    id: 'mock-fb-page-1',
-    platform: 'FACEBOOK',
-    accountId: 'fb_page_10293847',
-    accountName: 'UTC Travel & Tourism Facebook Page',
-    status: 'CONNECTED',
-    accessToken: encryptToken('EAA_DEMO_FACEBOOK_PAGE_TOKEN'),
-    tokenExpiresAt: new Date(Date.now() + 60 * 24 * 3600 * 1000),
-    scope: 'pages_show_list,pages_read_engagement,leads_retrieval,pages_manage_metadata',
-    metadata: { likes: 12450, category: 'Travel Agency' },
-    lastSyncAt: new Date(),
-    errorMessage: null,
-  },
-  {
-    id: 'mock-ig-page-1',
-    platform: 'INSTAGRAM',
-    accountId: 'ig_user_88776655',
-    accountName: '@utctravel.official',
-    status: 'CONNECTED',
-    accessToken: encryptToken('EAA_DEMO_INSTAGRAM_TOKEN'),
-    tokenExpiresAt: new Date(Date.now() + 60 * 24 * 3600 * 1000),
-    scope: 'instagram_basic,instagram_manage_messages',
-    metadata: { followers: 28900, media_count: 342 },
-    lastSyncAt: new Date(),
-    errorMessage: null,
-  },
-  {
-    id: 'mock-waba-1',
-    platform: 'WHATSAPP',
-    accountId: 'waba_991827364',
-    accountName: 'UTC Travel Business WhatsApp (+1 800 555-8821)',
-    status: 'CONNECTED',
-    accessToken: encryptToken('EAA_DEMO_WHATSAPP_TOKEN'),
-    tokenExpiresAt: new Date(Date.now() + 60 * 24 * 3600 * 1000),
-    scope: 'whatsapp_business_management,whatsapp_business_messaging',
-    metadata: { phone_number_id: '1092837465', display_phone_number: '+1 (800) 555-8821', quality_rating: 'GREEN' },
-    lastSyncAt: new Date(),
-    errorMessage: null,
-  }
-];
+let inMemoryAccounts: any[] = [];
 
 let inMemoryMessages: any[] = [];
 let inMemoryProcessedEvents = new Set<string>();
