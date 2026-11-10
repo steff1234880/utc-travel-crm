@@ -6,7 +6,7 @@ import {
   UserSquare2, PieChart, CreditCard, Receipt, RefreshCcw, Compass, 
   MapPin, Building, Plane, Train, Bus, ShieldCheck, KeyRound, LogOut, Lock, MessageSquare, LayoutTemplate,
   Menu, X, ChevronDown, ChevronRight, LayoutGrid, Download, Sparkles, MessageCircle, ArrowRight, Clock, CalendarCheck,
-  Share2
+  Share2, Award
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { NotificationsDropdown } from '../components/admin/NotificationsDropdown';
@@ -158,6 +158,7 @@ export default function AdminLayout() {
       badgeColor: 'bg-amber-50 text-amber-800 border border-amber-100',
       items: [
         { name: 'Payroll', path: '/admin/payroll', icon: Wallet, module: 'Salary' },
+        { name: 'Incentives & Performance', path: '/admin/incentives', icon: Award },
         { name: 'Payroll Ledger', path: '/admin/accounting/payroll', icon: Wallet, module: 'Salary' }
       ]
     },

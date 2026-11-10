@@ -34,6 +34,7 @@ import analyticsRoutes from './routes/analyticsRoutes';
 import timelineRoutes from './routes/timelineRoutes';
 import notificationRoutes from './routes/notificationRoutes';
 import tourPricingRoutes from './routes/tourPricingRoutes';
+import incentiveRoutes from './routes/incentiveRoutes';
 
 // RBAC & Security Routes
 import userRoutes from './routes/userRoutes';
@@ -66,6 +67,7 @@ app.use('/api/contact', contactRoutes);
 app.use('/api/enquiries', enquiryRoutes);
 app.use('/api/hr', hrRoutes);
 app.use('/api/hr/payroll', payrollRoutes);
+app.use('/api/incentives', incentiveRoutes);
 app.use('/api/packages', packageRoutes);
 app.use('/packages', packageRoutes); // Route alias for public / direct frontend calls
 app.use('/api/settings', settingsRoutes);

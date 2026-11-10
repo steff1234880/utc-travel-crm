@@ -77,36 +77,59 @@ export const payBonus = async (bonusId: string, createdById: string, paymentMeth
 
 /**
  * Marks an Incentive/Commission as PAID and creates the Accounting entry.
+ * Uses PostgreSQL row-level locking (SELECT ... FOR UPDATE) to strictly prevent concurrent duplicate payouts.
  */
 export const payIncentive = async (incentiveId: string, createdById: string, paymentMethod: string = 'BANK_TRANSFER') => {
   return await prisma.$transaction(async (tx) => {
-    const incentive = await tx.employeeIncentive.findUnique({
-      where: { id: incentiveId }
-    });
+    // 1. Lock the EmployeeIncentive row using PostgreSQL row-level locking (SELECT ... FOR UPDATE)
+    const lockedRows: any[] = await tx.$queryRaw`
+      SELECT id, status, amount, reason, "transactionId"
+      FROM "EmployeeIncentive"
+      WHERE id = ${incentiveId}
+      FOR UPDATE
+    `;
 
-    if (!incentive) throw new Error('Incentive not found');
-    if (incentive.transactionId) return incentive;
-    if (incentive.status === 'PAID') return incentive;
+    if (!lockedRows || lockedRows.length === 0) {
+      throw new Error('Incentive not found');
+    }
 
+    const lockedIncentive = lockedRows[0];
+
+    // 2. If already PAID or already linked to a transaction, return cleanly (Idempotent response)
+    if (lockedIncentive.status === 'PAID' || lockedIncentive.transactionId) {
+      return await tx.employeeIncentive.findUnique({
+        where: { id: incentiveId },
+        include: { transaction: true }
+      });
+    }
+
+    // 3. Strict verification: Only APPROVED incentives can be paid
+    if (lockedIncentive.status !== 'APPROVED') {
+      throw new Error(`Only APPROVED incentives can be paid. Current status: ${lockedIncentive.status}`);
+    }
+
+    // 4. Create the FinancialTransaction atomically under row lock
     const transaction = await tx.financialTransaction.create({
       data: {
         referenceNumber: `INC-${Date.now()}`,
         type: 'SALARY',
-        amount: incentive.amount,
+        amount: lockedIncentive.amount,
         currency: 'INR',
         paymentMethod,
-        notes: `Incentive: ${incentive.reason}`,
+        notes: `Incentive: ${lockedIncentive.reason}`,
         createdById,
         status: 'COMPLETED'
       }
     });
 
+    // 5. Update EmployeeIncentive to PAID with the newly created transactionId
     return await tx.employeeIncentive.update({
       where: { id: incentiveId },
       data: {
         status: 'PAID',
         transactionId: transaction.id
-      }
+      },
+      include: { transaction: true }
     });
   });
 };

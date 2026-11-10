@@ -124,6 +124,7 @@ model Employee {
   leaveBalances                 EmployeeLeaveBalance[]
   leadAssignmentsReceived       LeadAssignmentHistory[]     @relation("LeadAssignedToEmployee")
   leadAssignmentsPrevious       LeadAssignmentHistory[]     @relation("LeadPreviousAssignee")
+  performanceScores             EmployeePerformanceScore[]
 }
 
 model EmployeeDocument {
@@ -207,22 +208,61 @@ model EmployeeBonus {
 }
 
 model EmployeeIncentive {
-  id           String   @id @default(uuid())
-  employeeId   String
-  amount       Float
-  type         String
-  reason       String
-  period       String?
-  status       String   @default("DRAFT")
-  createdById  String
-  approvedById String?
-  notes        String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String    @id @default(uuid())
+  employeeId      String
+  amount          Float
+  type            String
+  reason          String
+  period          String?
+  month           Int?
+  year            Int?
+  status          String    @default("DRAFT")
+  createdById     String
+  approvedById    String?
+  notes           String?
+  rejectionReason String?
+  paymentMethod   String?
+  paymentReference String?
+  paidAt          DateTime?
+  scoreSnapshotId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  transactionId String?               @unique
-  employee      Employee              @relation(fields: [employeeId], references: [id])
-  transaction   FinancialTransaction? @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  transactionId String?                  @unique
+  employee      Employee                 @relation(fields: [employeeId], references: [id])
+  transaction   FinancialTransaction?    @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  scoreSnapshot EmployeePerformanceScore? @relation(fields: [scoreSnapshotId], references: [id], onDelete: SetNull)
+
+  @@unique([employeeId, month, year])
+  @@index([employeeId])
+  @@index([status])
+  @@index([month, year])
+}
+
+model EmployeePerformanceScore {
+  id                 String              @id @default(uuid())
+  employeeId         String
+  month              Int
+  year               Int
+  department         String
+  designation        String?
+  score              Float?
+  grade              String?
+  hasData            Boolean             @default(false)
+  summary            String?
+  metrics            Json
+  unavailableMetrics Json?
+  calculatedAt       DateTime            @default(now())
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  employee   Employee            @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  incentives EmployeeIncentive[]
+
+  @@unique([employeeId, month, year])
+  @@index([employeeId])
+  @@index([month, year])
+  @@index([department])
 }
 
 model EmployeePayout {

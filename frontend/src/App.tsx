@@ -35,6 +35,7 @@ import Settings from './pages/admin/Settings';
 import HomePageManagement from './pages/admin/website/HomePageManagement';
 import FooterManagement from './pages/admin/website/FooterManagement';
 import PayrollManagement from './pages/admin/hr/PayrollManagement';
+import IncentiveManagement from './pages/admin/hr/IncentiveManagement';
 
 import SalesDashboard from './pages/admin/crm/SalesDashboard';
 import MetaAnalytics from './pages/admin/crm/MetaAnalytics';
@@ -207,6 +208,7 @@ function App() {
               <Route path="designations" element={<ProtectedRoute requiredModule="HR"><DesignationList /></ProtectedRoute>} />
               <Route path="employees" element={<ProtectedRoute requiredModule="Employees"><EmployeeList /></ProtectedRoute>} />
               <Route path="payroll" element={<ProtectedRoute requiredModule="Salary"><PayrollManagement /></ProtectedRoute>} />
+              <Route path="incentives" element={<ProtectedRoute><IncentiveManagement /></ProtectedRoute>} />
               
               {/* Website & Catalog */}
               <Route path="packages" element={<ProtectedRoute requiredModule="Packages"><PackageManagement /></ProtectedRoute>} />
