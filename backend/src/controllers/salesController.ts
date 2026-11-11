@@ -1,12 +1,38 @@
 import { Request, Response } from 'express';
+import { Prisma } from '@prisma/client';
 import prisma from '../utils/prisma';
 
 export const getSalesDashboardMetrics = async (req: Request, res: Response) => {
   try {
-    const totalLeads = await prisma.salesLead.count();
-    const newLeads = await prisma.salesLead.count({ where: { pipelineStage: { name: 'New' } } });
-    const wonLeads = await prisma.salesLead.count({ where: { pipelineStage: { name: 'Won' } } });
-    const lostLeads = await prisma.salesLead.count({ where: { pipelineStage: { name: 'Lost' } } });
+    // Base filter for active, valid business leads:
+    // Excludes soft-deleted/archived leads and leads tied to deleted/inactive employees
+    const validLeadWhere: Prisma.SalesLeadWhereInput = {
+      status: { notIn: ['ARCHIVED', 'DELETED'] },
+      OR: [
+        { assignedToId: null },
+        { assignedTo: { status: 'ACTIVE' } }
+      ]
+    };
+
+    const totalLeads = await prisma.salesLead.count({ where: validLeadWhere });
+    const newLeads = await prisma.salesLead.count({
+      where: {
+        ...validLeadWhere,
+        pipelineStage: { name: 'New' }
+      }
+    });
+    const wonLeads = await prisma.salesLead.count({
+      where: {
+        ...validLeadWhere,
+        pipelineStage: { name: 'Won' }
+      }
+    });
+    const lostLeads = await prisma.salesLead.count({
+      where: {
+        ...validLeadWhere,
+        pipelineStage: { name: 'Lost' }
+      }
+    });
     
     // Revenue from actual valid payments (matches CEO Dashboard definition)
     const incomeTransAgg = await prisma.financialTransaction.aggregate({
@@ -15,13 +41,22 @@ export const getSalesDashboardMetrics = async (req: Request, res: Response) => {
     });
     const totalRevenue = incomeTransAgg._sum.amount || 0;
     
-    const activeQuotations = await prisma.quotation.count({ where: { status: 'SENT' } });
+    const activeQuotations = await prisma.quotation.count({
+      where: {
+        status: 'SENT',
+        salesLead: validLeadWhere
+      }
+    });
 
-    const activeLeads = totalLeads - wonLeads - lostLeads;
+    const activeLeads = Math.max(0, totalLeads - wonLeads - lostLeads);
 
-    // Fetch recent Sales Activities
+    // Fetch recent Sales Activities (only on active non-deleted leads with active employees)
     const salesActivities = await prisma.salesActivity.findMany({
       take: 10,
+      where: {
+        salesLead: validLeadWhere,
+        employee: { status: 'ACTIVE' }
+      },
       orderBy: { createdAt: 'desc' },
       include: {
         employee: true,
@@ -29,12 +64,21 @@ export const getSalesDashboardMetrics = async (req: Request, res: Response) => {
       }
     });
 
-    // Fetch relevant CRM/Accounting Audit Logs
+    // Fetch relevant CRM/Accounting Audit Logs (exclude deleted employee history and system setting toggles)
+    const activeUsers = await prisma.user.findMany({
+      where: {
+        employee: { status: 'ACTIVE' }
+      },
+      select: { email: true }
+    });
+    const activeEmails = activeUsers.map(u => u.email).filter(Boolean);
+
     const auditLogs = await prisma.auditLog.findMany({
       take: 10,
       where: {
         module: { in: ['CRM', 'ACCOUNTING', 'Sales CRM'] },
-        action: { notIn: ['LOGIN'] }
+        action: { notIn: ['LOGIN', 'LOGOUT', 'FAILED_LOGIN', 'UPDATE_SYSTEM_SETTINGS'] },
+        userEmail: { in: activeEmails }
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -84,11 +128,20 @@ export const getSalesPipeline = async (req: Request, res: Response) => {
   try {
     const userRole = await prisma.role.findUnique({ where: { id: req.user?.roleId || '' } });
     const normalizedRole = (userRole?.name || '').toUpperCase().trim();
-    let leadFilter: any = {};
+    let leadFilter: Prisma.SalesLeadWhereInput = {
+      status: { notIn: ['ARCHIVED', 'DELETED'] },
+      OR: [
+        { assignedToId: null },
+        { assignedTo: { status: 'ACTIVE' } }
+      ]
+    };
     if (normalizedRole === 'SALES_EXECUTIVE' || normalizedRole === 'SALES EXECUTIVE') {
       const employee = await prisma.employee.findUnique({ where: { userId: req.user!.userId } });
       if (employee) {
-        leadFilter = { assignedToId: employee.id };
+        leadFilter = {
+          ...leadFilter,
+          assignedToId: employee.id
+        };
       }
     }
 

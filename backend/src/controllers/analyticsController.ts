@@ -1032,20 +1032,22 @@ export const getFinancialAnalytics = async (req: Request, res: Response) => {
 // 5. EMPLOYEE ANALYTICS
 export const getEmployeeAnalytics = async (req: Request, res: Response) => {
   try {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     const { gte, lte } = parseFilterDates(req);
     const departmentFilter = req.query.departmentId as string | undefined;
 
-    // 1. EMPLOYEE SUMMARY KPI CARDS
-    const totalEmployees = await prisma.employee.count();
+    // 1. EMPLOYEE SUMMARY KPI CARDS (excluding DELETED employees)
+    const totalEmployees = await prisma.employee.count({ where: { status: { not: 'DELETED' } } });
     const activeEmployees = await prisma.employee.count({ where: { status: 'ACTIVE' } });
     const inactiveEmployees = await prisma.employee.count({
-      where: { status: { not: 'ACTIVE' } }
+      where: { status: { notIn: ['ACTIVE', 'DELETED'] } }
     });
 
     // 2. DEPARTMENT-WISE DISTRIBUTION
     const departments = await prisma.department.findMany({
       include: {
         employees: {
+          where: { status: { not: 'DELETED' } },
           select: { id: true, status: true }
         }
       }
@@ -1059,7 +1061,7 @@ export const getEmployeeAnalytics = async (req: Request, res: Response) => {
     }));
 
     const noDeptEmployees = await prisma.employee.count({
-      where: { departmentId: null }
+      where: { departmentId: null, status: { not: 'DELETED' } }
     });
     if (noDeptEmployees > 0) {
       departmentDistribution.push({

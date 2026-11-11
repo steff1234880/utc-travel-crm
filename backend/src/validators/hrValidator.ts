@@ -10,10 +10,10 @@ export const createEmployeeSchema = z.object({
   emergencyContact: z.string().optional(),
   employeeId: z.string().min(1, 'Employee ID is required'),
   joiningDate: z.string().optional(),
-  departmentId: z.string().optional(),
-  designationId: z.string().optional(),
+  departmentId: z.string().optional().or(z.literal('')).nullable(),
+  designationId: z.string().optional().or(z.literal('')).nullable(),
   role: z.string().min(2, 'Role is required'),
-  designation: z.string().min(2, 'Designation is required'),
+  designation: z.string().optional().or(z.literal('')).nullable(),
   status: z.enum(['ACTIVE', 'INACTIVE', 'ON_LEAVE', 'RESIGNED', 'TERMINATED']).default('ACTIVE'),
   employmentType: z.enum(['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN']).default('FULL_TIME'),
   reportingManagerId: z.string().optional(),
@@ -21,7 +21,15 @@ export const createEmployeeSchema = z.object({
   password: z.string().optional(),
 });
 
-export const updateEmployeeSchema = createEmployeeSchema.partial();
+export const updateEmployeeSchema = createEmployeeSchema.partial().extend({
+  role: z.string().optional().or(z.literal('')),
+  designation: z.string().optional().or(z.literal('')),
+  departmentId: z.string().optional().or(z.literal('')).nullable(),
+  designationId: z.string().optional().or(z.literal('')).nullable(),
+  reportingManagerId: z.string().optional().or(z.literal('')).nullable(),
+  password: z.string().optional().or(z.literal('')),
+  confirmPassword: z.string().optional().or(z.literal('')),
+});
 
 export const createDepartmentSchema = z.object({
   name: z.string().min(2, 'Department name is required'),

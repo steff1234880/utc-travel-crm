@@ -3,6 +3,7 @@ import prisma from '../utils/prisma';
 
 export const getDashboardStats = async (req: Request, res: Response) => {
   try {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     const currentMonth = new Date().getMonth() + 1;
     const currentYear = new Date().getFullYear();
 
@@ -36,8 +37,9 @@ export const getDashboardStats = async (req: Request, res: Response) => {
       employeeCount: d._count.employees
     }));
 
-    // Recent Activity: Employees
+    // Recent Activity: Employees (excluding deleted employees)
     const recentEmployees = await prisma.employee.findMany({
+      where: { status: { not: 'DELETED' } },
       take: 5,
       orderBy: { createdAt: 'desc' },
       include: {

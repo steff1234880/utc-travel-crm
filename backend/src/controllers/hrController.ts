@@ -13,12 +13,19 @@ import {
 // --- Dashboard ---
 export const getHRStats = async (req: Request, res: Response) => {
   try {
-    const totalEmployees = await prisma.employee.count();
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    const totalEmployees = await prisma.employee.count({ where: { status: { not: 'DELETED' } } });
     const activeEmployees = await prisma.employee.count({ where: { status: 'ACTIVE' } });
+    const inactiveEmployees = await prisma.employee.count({ 
+      where: { 
+        status: { notIn: ['ACTIVE', 'DELETED'] } 
+      } 
+    });
     const departments = await prisma.department.count();
     
-    // Recent activity or latest employees
+    // Recent activity or latest employees (excluding deleted employees)
     const recentEmployees = await prisma.employee.findMany({
+      where: { status: { not: 'DELETED' } },
       take: 5,
       orderBy: { createdAt: 'desc' },
       include: { department: true, designation: true }
@@ -29,7 +36,7 @@ export const getHRStats = async (req: Request, res: Response) => {
       data: {
         totalEmployees,
         activeEmployees,
-        inactiveEmployees: totalEmployees - activeEmployees,
+        inactiveEmployees,
         departments,
         recentEmployees
       }
@@ -45,10 +52,27 @@ export const createEmployee = async (req: Request, res: Response) => {
   try {
     const data = createEmployeeSchema.parse(req.body);
     
-    // Check if user or employee with email already exists
-    let user = await prisma.user.findUnique({ where: { email: data.email } });
-    if (user) {
-      return res.status(400).json({ success: false, message: 'User or employee with this email address already exists' });
+    // Check if user or active employee with email already exists
+    const existingUser = await prisma.user.findUnique({ 
+      where: { email: data.email },
+      include: { employee: true }
+    });
+
+    if (existingUser) {
+      if (existingUser.employee && existingUser.employee.status === 'DELETED') {
+        // The previous employee associated with this User was soft-deleted.
+        // Free up the email on the archived user record so the new employee can use it cleanly.
+        const timestamp = Date.now();
+        await prisma.user.update({
+          where: { id: existingUser.id },
+          data: {
+            email: `deleted_${timestamp}_${existingUser.email}`,
+            isActive: false
+          }
+        });
+      } else {
+        return res.status(400).json({ success: false, message: 'User or employee with this email address already exists' });
+      }
     }
 
     const rawPassword = data.password || 'Password@123';
@@ -79,7 +103,7 @@ export const createEmployee = async (req: Request, res: Response) => {
       });
     }
     
-    user = await prisma.user.create({
+    const user = await prisma.user.create({
       data: {
         email: data.email,
         passwordHash,
@@ -88,24 +112,30 @@ export const createEmployee = async (req: Request, res: Response) => {
       }
     });
 
-    // Designation Handling
-    let departmentId = data.departmentId;
-    if (!departmentId) {
-      let generalDept = await prisma.department.findUnique({ where: { name: 'General' } });
-      if (!generalDept) {
-        generalDept = await prisma.department.create({ data: { name: 'General' } });
-      }
-      departmentId = generalDept.id;
-    }
+    // Designation Handling (Optional)
+    let designationId: string | null = null;
+    let departmentId = data.departmentId && data.departmentId.trim() !== '' ? data.departmentId : null;
 
-    let designation = await prisma.designation.findFirst({ 
-      where: { name: data.designation, departmentId } 
-    });
-    
-    if (!designation) {
-      designation = await prisma.designation.create({
-        data: { name: data.designation, departmentId }
+    if (data.designation && data.designation.trim() !== '') {
+      let targetDeptId = departmentId;
+      if (!targetDeptId) {
+        let generalDept = await prisma.department.findUnique({ where: { name: 'General' } });
+        if (!generalDept) {
+          generalDept = await prisma.department.create({ data: { name: 'General' } });
+        }
+        targetDeptId = generalDept.id;
+      }
+
+      let designation = await prisma.designation.findFirst({ 
+        where: { name: data.designation.trim(), departmentId: targetDeptId } 
       });
+      
+      if (!designation) {
+        designation = await prisma.designation.create({
+          data: { name: data.designation.trim(), departmentId: targetDeptId }
+        });
+      }
+      designationId = designation.id;
     }
 
     const existingEmployee = await prisma.employee.findUnique({ where: { employeeId: data.employeeId } });
@@ -126,8 +156,8 @@ export const createEmployee = async (req: Request, res: Response) => {
         status: data.status,
         employmentType: data.employmentType,
         departmentId: departmentId,
-        designationId: designation.id,
-        reportingManagerId: data.reportingManagerId,
+        designationId: designationId,
+        reportingManagerId: data.reportingManagerId && data.reportingManagerId.trim() !== '' ? data.reportingManagerId : null,
         bankDetails: data.bankDetails
       },
       include: {
@@ -244,12 +274,27 @@ export const updateEmployee = async (req: Request, res: Response) => {
     if (data.joiningDate) updateData.joiningDate = new Date(data.joiningDate);
     
     delete updateData.email;
+    delete updateData.password;
+    delete updateData.confirmPassword;
+
+    // Handle foreign key nullification if empty string passed
+    if (updateData.departmentId === '') updateData.departmentId = null;
+    if (updateData.designationId === '') updateData.designationId = null;
+    if (updateData.reportingManagerId === '') updateData.reportingManagerId = null;
     
     // Handle Role Update
-    if (data.role) {
-      let role = await prisma.role.findUnique({ where: { name: data.role } });
+    if (data.role && data.role.trim() !== '') {
+      let role = await prisma.role.findFirst({
+        where: {
+          OR: [
+            { name: data.role },
+            { id: data.role },
+            { name: { equals: data.role, mode: 'insensitive' } }
+          ]
+        }
+      });
       if (!role) {
-        role = await prisma.role.create({ data: { name: data.role } });
+        role = await prisma.role.create({ data: { name: data.role, description: `Custom role for ${data.role}` } });
       }
       
       const employeeData = await prisma.employee.findUnique({ where: { id } });
@@ -259,36 +304,36 @@ export const updateEmployee = async (req: Request, res: Response) => {
           data: { roleId: role.id }
         });
       }
-      delete updateData.role;
     }
+    delete updateData.role;
 
     // Handle Designation Update
-    if (data.designation) {
-      let departmentId: string | null | undefined = data.departmentId;
-      if (!departmentId) {
+    if (data.designation && data.designation.trim() !== '') {
+      let targetDeptId: string | null | undefined = updateData.departmentId !== undefined ? updateData.departmentId : undefined;
+      if (!targetDeptId) {
         const emp = await prisma.employee.findUnique({ where: { id } });
-        departmentId = emp?.departmentId;
-        if (!departmentId) {
+        targetDeptId = emp?.departmentId;
+        if (!targetDeptId) {
           let generalDept = await prisma.department.findUnique({ where: { name: 'General' } });
           if (!generalDept) {
             generalDept = await prisma.department.create({ data: { name: 'General' } });
           }
-          departmentId = generalDept.id;
+          targetDeptId = generalDept.id;
         }
       }
 
       let designation = await prisma.designation.findFirst({ 
-        where: { name: data.designation, departmentId } 
+        where: { name: data.designation.trim(), departmentId: targetDeptId } 
       });
       
       if (!designation) {
         designation = await prisma.designation.create({
-          data: { name: data.designation, departmentId }
+          data: { name: data.designation.trim(), departmentId: targetDeptId }
         });
       }
       updateData.designationId = designation.id;
-      delete updateData.designation;
     }
+    delete updateData.designation;
 
     const employee = await prisma.employee.update({
       where: { id },
@@ -298,7 +343,8 @@ export const updateEmployee = async (req: Request, res: Response) => {
 
     res.status(200).json({ success: true, data: employee });
   } catch (error) {
-    res.status(400).json({ success: false, message: 'Failed to update employee', error });
+    console.error('Update Employee Error:', error);
+    res.status(400).json({ success: false, message: 'Failed to update employee', error: error instanceof Error ? error.message : error });
   }
 };
 
@@ -380,7 +426,10 @@ export const deleteEmployee = async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
     
-    const existingEmployee = await prisma.employee.findUnique({ where: { id } });
+    const existingEmployee = await prisma.employee.findUnique({ 
+      where: { id },
+      include: { user: true }
+    });
     if (!existingEmployee) {
       return res.status(404).json({ success: false, message: 'Employee not found' });
     }
@@ -388,6 +437,33 @@ export const deleteEmployee = async (req: Request, res: Response) => {
     await prisma.employee.update({
       where: { id },
       data: { status: 'DELETED' }
+    });
+
+    if (existingEmployee.userId) {
+      const timestamp = Date.now();
+      const anonymizedEmail = `deleted_${timestamp}_${existingEmployee.user?.email || existingEmployee.userId}`;
+      await prisma.user.update({
+        where: { id: existingEmployee.userId },
+        data: { 
+          email: anonymizedEmail,
+          isActive: false 
+        }
+      });
+    }
+
+    await logAudit({
+      req,
+      action: 'EMPLOYEE_DELETE',
+      module: 'Employees',
+      recordId: id,
+      previousValue: { 
+        employeeId: existingEmployee.employeeId, 
+        email: existingEmployee.user?.email,
+        status: existingEmployee.status 
+      },
+      newValue: { status: 'DELETED' },
+      status: 'SUCCESS',
+      details: `Deleted employee ${existingEmployee.employeeId} (${existingEmployee.firstName} ${existingEmployee.lastName})`
     });
 
     res.status(200).json({ success: true, message: 'Employee deleted successfully' });

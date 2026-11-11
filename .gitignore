@@ -22,6 +22,7 @@ yarn-debug.log*
 
 # Database & local sqlite/pg data
 pgdata/
+database_backup/
 *.sqlite
 *.sqlite3
 

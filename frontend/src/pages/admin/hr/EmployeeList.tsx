@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
 import { Plus, Search, Filter, Edit, Trash2, Eye } from 'lucide-react';
@@ -65,6 +65,55 @@ export default function EmployeeList() {
     },
   });
 
+  // Department-specific fallback designations when database designations are empty or need standard defaults
+  const departmentDesignationsMap: Record<string, string[]> = {
+    sales: ['Sales Manager', 'Sales Executive', 'Senior Travel Consultant', 'Travel Consultant'],
+    operations: ['Operations Manager', 'Operations Executive', 'Tour Coordinator', 'Reservation Executive'],
+    accounting: ['Finance Manager', 'Senior Accountant', 'Accountant', 'Accounts Executive'],
+    hr: ['HR Manager', 'HR Executive', 'HR Coordinator'],
+    management: ['Managing Director', 'CEO', 'General Manager'],
+    reservations: ['Reservation Manager', 'Reservation Executive'],
+    marketing: ['Marketing Manager', 'Marketing Executive'],
+    general: ['Administrative Officer', 'Operations Executive', 'Travel Consultant', 'Other']
+  };
+
+  const selectedDeptObj = departmentsData?.data?.find(d => d.id === formData.departmentId);
+  const selectedDeptName = selectedDeptObj?.name?.toLowerCase().trim() || '';
+
+  // Compute available designations strictly tied to the selected department
+  const availableDesignations = useMemo(() => {
+    if (!formData.departmentId) return [];
+
+    const dbOptions = (designationsData?.data || [])
+      .filter(d => d.departmentId === formData.departmentId)
+      .map(d => d.name);
+
+    // Look for fallback options for this department
+    const fallbackOptions = departmentDesignationsMap[selectedDeptName] || [];
+
+    // Deduplicate while preserving department uniqueness
+    const combined = Array.from(new Set([...dbOptions, ...fallbackOptions]));
+    return combined;
+  }, [formData.departmentId, designationsData?.data, selectedDeptName]);
+
+  const handleDepartmentChange = (newDeptId: string) => {
+    const newDeptObj = departmentsData?.data?.find(d => d.id === newDeptId);
+    const newDeptName = newDeptObj?.name?.toLowerCase().trim() || '';
+    const newAllowed = newDeptId
+      ? Array.from(new Set([
+          ...(designationsData?.data || []).filter(d => d.departmentId === newDeptId).map(d => d.name),
+          ...(departmentDesignationsMap[newDeptName] || [])
+        ]))
+      : [];
+
+    setFormData(prev => ({
+      ...prev,
+      departmentId: newDeptId,
+      // Reset previously selected designation if it is not valid for the new department
+      designation: newAllowed.includes(prev.designation) ? prev.designation : ''
+    }));
+  };
+
   const { data, isLoading } = useQuery<{ data: Employee[] }>({
     queryKey: ['employees', searchTerm],
     queryFn: async () => {
@@ -80,6 +129,14 @@ export default function EmployeeList() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employees'] });
+      queryClient.invalidateQueries({ queryKey: ['hr-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['departments'] });
+      queryClient.invalidateQueries({ queryKey: ['designations'] });
+      queryClient.invalidateQueries({ queryKey: ['payroll-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-employees-dropdown'] });
+      queryClient.invalidateQueries({ queryKey: ['employees-simple'] });
+      queryClient.invalidateQueries({ queryKey: ['employees-minimal'] });
       setFormSuccess('Employee and user account created successfully!');
       setTimeout(() => {
         closeModal();
@@ -97,6 +154,14 @@ export default function EmployeeList() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employees'] });
+      queryClient.invalidateQueries({ queryKey: ['hr-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['departments'] });
+      queryClient.invalidateQueries({ queryKey: ['designations'] });
+      queryClient.invalidateQueries({ queryKey: ['payroll-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-employees-dropdown'] });
+      queryClient.invalidateQueries({ queryKey: ['employees-simple'] });
+      queryClient.invalidateQueries({ queryKey: ['employees-minimal'] });
       setFormSuccess('Employee updated successfully!');
       setTimeout(() => {
         closeModal();
@@ -112,9 +177,56 @@ export default function EmployeeList() {
       const res = await api.delete(`/hr/employees/${id}`);
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['employees'] });
-      queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
+    onSuccess: (_data, deletedId) => {
+      // 1. Immediately remove the deleted employee from all employee list queries in the cache
+      queryClient.setQueriesData<{ data: Employee[] }>({ queryKey: ['employees'] }, (old) => {
+        if (!old || !Array.isArray(old.data)) return old;
+        return {
+          ...old,
+          data: old.data.filter((emp) => emp.id !== deletedId)
+        };
+      });
+
+      // 2. Immediately decrement the HR dashboard stats cache if present
+      queryClient.setQueryData<any>(['hr-stats'], (old: any) => {
+        if (!old) return old;
+        const isTargetActive = employeeToDelete?.status === 'ACTIVE';
+        return {
+          ...old,
+          totalEmployees: Math.max(0, (old.totalEmployees || 0) - 1),
+          activeEmployees: isTargetActive ? Math.max(0, (old.activeEmployees || 0) - 1) : (old.activeEmployees || 0),
+          inactiveEmployees: !isTargetActive ? Math.max(0, (old.inactiveEmployees || 0) - 1) : (old.inactiveEmployees || 0),
+          recentEmployees: Array.isArray(old.recentEmployees)
+            ? old.recentEmployees.filter((e: any) => e.id !== deletedId)
+            : old.recentEmployees
+        };
+      });
+
+      // 3. Immediately decrement the Overview Admin dashboard stats cache if present
+      queryClient.setQueryData<any>(['admin-dashboard'], (old: any) => {
+        if (!old) return old;
+        const isTargetActive = employeeToDelete?.status === 'ACTIVE';
+        return {
+          ...old,
+          totalEmployees: isTargetActive ? Math.max(0, (old.totalEmployees || 0) - 1) : (old.totalEmployees || 0),
+          recentEmployees: Array.isArray(old.recentEmployees)
+            ? old.recentEmployees.filter((e: any) => e.id !== deletedId)
+            : old.recentEmployees
+        };
+      });
+
+      // 4. Invalidate all relevant queries across active and inactive routes with refetchType: 'all'
+      queryClient.invalidateQueries({ queryKey: ['employees'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['hr-stats'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['admin-dashboard'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['departments'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['designations'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['payroll-dashboard'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['admin-employees-dropdown'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['employees-simple'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['employees-minimal'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['monthly-top-performers'], refetchType: 'all' });
+
       setIsDeleteModalOpen(false);
       setEmployeeToDelete(null);
     },
@@ -393,7 +505,12 @@ export default function EmployeeList() {
 
                   <div>
                     <label className="block text-sm font-bold text-slate-700 mb-1">Department</label>
-                    <select value={formData.departmentId} onChange={e => setFormData({...formData, departmentId: e.target.value})} className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50" disabled={isDeptsLoading || isDeptsError}>
+                    <select 
+                      value={formData.departmentId} 
+                      onChange={e => handleDepartmentChange(e.target.value)} 
+                      className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50" 
+                      disabled={isDeptsLoading || isDeptsError}
+                    >
                       <option value="">Select a department...</option>
                       {isDeptsLoading && <option disabled>Loading departments...</option>}
                       {isDeptsError && <option disabled>Error loading departments</option>}
@@ -411,24 +528,19 @@ export default function EmployeeList() {
                     <select 
                       value={formData.designation} 
                       onChange={e => setFormData({...formData, designation: e.target.value})} 
-                      className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50 disabled:cursor-not-allowed"
+                      disabled={!formData.departmentId}
                     >
-                      <option value="">Select a designation...</option>
-                      {designationsData?.data?.map(desig => (
-                        <option key={desig.id} value={desig.name}>{desig.name}</option>
+                      <option value="">
+                        {!formData.departmentId 
+                          ? 'Select a department first...' 
+                          : availableDesignations.length === 0 
+                            ? 'No designations for this department' 
+                            : 'Select a designation...'}
+                      </option>
+                      {availableDesignations.map(name => (
+                        <option key={name} value={name}>{name}</option>
                       ))}
-                      {(!designationsData?.data || designationsData.data.length === 0) && (
-                        <>
-                          <option value="CEO">CEO</option>
-                          <option value="HR Manager">HR Manager</option>
-                          <option value="Sales Manager">Sales Manager</option>
-                          <option value="Sales Executive">Sales Executive</option>
-                          <option value="Accountant">Accountant</option>
-                          <option value="Operations Manager">Operations Manager</option>
-                          <option value="Travel Consultant">Travel Consultant</option>
-                          <option value="Other">Other</option>
-                        </>
-                      )}
                     </select>
                   </div>
                   
