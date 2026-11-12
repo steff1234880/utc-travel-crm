@@ -9,6 +9,7 @@ import {
   deleteFollowUp,
   updateLead,
   deleteLead,
+  getEligibleSalesExecutivesController,
   getLeadAssignmentOverviewController,
   assignLeadController,
   getLeadAssignmentHistoryController,
@@ -24,6 +25,7 @@ const managerAndAdminRoles = authorizeRole(['Sales Manager', 'CEO / Super Admin'
 const adminOnlyRoles = authorizeRole(['CEO / Super Admin', 'Admin', 'ADMIN', 'SUPER_ADMIN']);
 
 router.get('/assignment/overview', authenticate, managerAndAdminRoles, getLeadAssignmentOverviewController);
+router.get('/assignment/executives', authenticate, requireModuleAccess('Sales CRM'), getEligibleSalesExecutivesController);
 router.get('/assignment/settings', authenticate, managerAndAdminRoles, getAssignmentSettingsController);
 router.patch('/assignment/settings', authenticate, adminOnlyRoles, updateAssignmentSettingsController);
 

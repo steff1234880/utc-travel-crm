@@ -4,6 +4,7 @@ import { z } from 'zod';
 import {
   assignLeadAutomatically,
   assignLeadManually,
+  getEligibleSalesExecutives,
   getAssignmentOverview,
   getLeadAssignmentHistory,
   setAutoAssignmentSetting
@@ -437,6 +438,16 @@ export const deleteLead = async (req: Request, res: Response) => {
 };
 
 // --- HYBRID AUTOMATIC LEAD ASSIGNMENT CONTROLLERS ---
+
+export const getEligibleSalesExecutivesController = async (req: Request, res: Response) => {
+  try {
+    const executives = await getEligibleSalesExecutives();
+    res.json({ success: true, data: executives });
+  } catch (error: any) {
+    console.error('Failed to get eligible sales executives:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to fetch eligible sales executives' });
+  }
+};
 
 export const getLeadAssignmentOverviewController = async (req: Request, res: Response) => {
   try {

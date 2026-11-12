@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../../services/api';
-import { X } from 'lucide-react';
+import { X, UserCheck } from 'lucide-react';
+import { useAuth } from '../../../context/AuthContext';
 
 interface NewLeadModalProps {
   isOpen: boolean;
@@ -8,11 +9,28 @@ interface NewLeadModalProps {
   onSuccess: () => void;
 }
 
+interface Executive {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  roleName: string;
+  designationName?: string;
+  departmentName?: string;
+}
+
 const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSuccess }) => {
+  const { hasRole, hasPermission } = useAuth();
   const [loading, setLoading] = useState(false);
   const [stages, setStages] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
+  const [executives, setExecutives] = useState<Executive[]>([]);
+  const [loadingExecutives, setLoadingExecutives] = useState(false);
   
+  const canAssignManually = hasRole(['Sales Manager', 'CEO / Super Admin', 'Admin', 'ADMIN', 'SUPER_ADMIN']) ||
+    hasPermission('sales_crm:manage') ||
+    hasPermission('sales_crm:assign');
+
   const [formData, setFormData] = useState({
     title: '',
     source: 'Manual Entry',
@@ -22,6 +40,7 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSuccess 
     destination: '',
     pipelineStage: 'New',
     customerId: '', // if existing
+    assignedToId: '', // '' indicates Auto Assign (Round Robin)
     
     // For new customer
     isNewCustomer: true,
@@ -35,11 +54,41 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSuccess 
     if (isOpen) {
       fetchStages();
       fetchCustomers();
+      fetchExecutives();
     }
   }, [isOpen]);
 
   const fetchStages = async () => {
     // Retained for any future usage, but stage select is now hardcoded.
+  };
+
+  const fetchExecutives = async () => {
+    setLoadingExecutives(true);
+    try {
+      // Fetch active, eligible Sales Executives
+      const res = await api.get('/crm/leads/assignment/executives');
+      if (res.data?.success && Array.isArray(res.data.data)) {
+        setExecutives(res.data.data);
+      } else {
+        // Fallback to overview endpoint if available
+        const overviewRes = await api.get('/crm/leads/assignment/overview');
+        if (overviewRes.data?.success && Array.isArray(overviewRes.data.data?.executives)) {
+          setExecutives(overviewRes.data.data.executives);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load eligible executives:', err);
+      try {
+        const overviewRes = await api.get('/crm/leads/assignment/overview');
+        if (overviewRes.data?.success && Array.isArray(overviewRes.data.data?.executives)) {
+          setExecutives(overviewRes.data.data.executives);
+        }
+      } catch (fallbackErr) {
+        console.error('Fallback executive fetch also failed:', fallbackErr);
+      }
+    } finally {
+      setLoadingExecutives(false);
+    }
   };
 
   const fetchCustomers = async () => {
@@ -75,7 +124,8 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSuccess 
         priority: formData.priority,
         destination: formData.destination,
         pipelineStage: formData.pipelineStage,
-        customerId: finalCustomerId
+        customerId: finalCustomerId,
+        assignedToId: formData.assignedToId && formData.assignedToId.trim() !== '' ? formData.assignedToId : undefined
       });
       
       onSuccess();
@@ -231,6 +281,33 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSuccess 
                   <option value="NEW">New</option>
                   <option value="IN_PROGRESS">In Progress</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-xs text-gray-500 mb-1 flex items-center justify-between">
+                  <span>Assign To</span>
+                  {canAssignManually && (
+                    <span className="text-[10px] text-blue-600 font-medium">Manual assignment authorized</span>
+                  )}
+                </label>
+                <select 
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                  value={formData.assignedToId} 
+                  onChange={e => setFormData({...formData, assignedToId: e.target.value})}
+                  disabled={!canAssignManually && executives.length > 0}
+                >
+                  <option value="">Auto Assign (Round Robin)</option>
+                  {executives.map(exec => (
+                    <option key={exec.id} value={exec.id}>
+                      {exec.firstName} {exec.lastName} ({exec.roleName || exec.designationName || 'Sales Executive'})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-gray-400 mt-1">
+                  {formData.assignedToId 
+                    ? 'This lead will be manually assigned to the selected Sales Executive.' 
+                    : 'Default: Lead will be automatically assigned in strict sequential round-robin order.'}
+                </p>
               </div>
             </div>
           </div>
