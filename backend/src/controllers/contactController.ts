@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
 import { contactEnquirySchema } from '../validators/contactValidator';
 import { z } from 'zod';
+import { assignLeadAutomatically } from '../services/leadAssignmentService';
 
 export const submitEnquiry = async (req: Request, res: Response) => {
   try {
@@ -11,6 +12,50 @@ export const submitEnquiry = async (req: Request, res: Response) => {
     const enquiry = await prisma.contactEnquiry.create({
       data
     });
+
+    // Create the corresponding CRM SalesLead and assign via existing Round Robin.
+    // Failures here must never break the public form submission.
+    try {
+      const marker = `[CE:${enquiry.id}]`;
+      const existingLead = await prisma.salesLead.findFirst({
+        where: { title: { contains: marker } },
+        select: { id: true }
+      });
+
+      if (!existingLead) {
+        const email = data.email.trim().toLowerCase();
+        let customer = await prisma.customer.findUnique({ where: { email } });
+        if (!customer) {
+          const parts = data.name.trim().split(/\s+/);
+          customer = await prisma.customer.create({
+            data: {
+              firstName: parts[0],
+              lastName: parts.slice(1).join(' '),
+              email,
+              phone: data.phone || null,
+              whatsappNumber: data.phone || null
+            }
+          });
+        }
+
+        const stage = await prisma.salesPipelineStage.findFirst({ where: { name: 'New' } });
+        const lead = await prisma.salesLead.create({
+          data: {
+            title: `Contact Us: ${data.subject} ${marker}`,
+            source: 'Contact Form',
+            status: 'NEW',
+            customerId: customer.id,
+            pipelineStageId: stage?.id || null
+          }
+        });
+
+        await assignLeadAutomatically(lead.id).catch((e) => {
+          console.error('Contact lead auto-assignment warning:', e);
+        });
+      }
+    } catch (leadErr) {
+      console.error('Contact form lead creation warning:', leadErr);
+    }
     
     res.status(201).json({ message: 'Enquiry submitted successfully', id: enquiry.id });
   } catch (error: unknown) {

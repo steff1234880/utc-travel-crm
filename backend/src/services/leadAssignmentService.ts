@@ -9,6 +9,7 @@ export interface EligibleExecutive {
   roleName: string;
   departmentName?: string;
   designationName?: string;
+  createdAt?: Date;
 }
 
 export interface ExecutiveWorkload extends EligibleExecutive {
@@ -47,9 +48,8 @@ export async function getEligibleSalesExecutives(tx?: Prisma.TransactionClient):
       department: true,
       designation: true
     },
-    orderBy: {
-      createdAt: 'asc'
-    }
+    // Display order in the CRM: creation order with stable id tie-breaker
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }]
   });
 
   const eligible: EligibleExecutive[] = [];
@@ -67,15 +67,11 @@ export async function getEligibleSalesExecutives(tx?: Prisma.TransactionClient):
     const isSalesExecRole = lowerRole.includes('sales executive') || lowerRole === 'sales_executive';
     const isSalesExecDesig = lowerDesig.includes('sales executive');
     
-    // Check if in Sales department and not a manager/director/coordinator
-    const isSalesDeptExec = lowerDept.includes('sales') && 
-      !lowerRole.includes('manager') && 
-      !lowerRole.includes('admin') && 
-      !lowerRole.includes('ceo') && 
-      !lowerDesig.includes('manager') &&
-      !lowerDesig.includes('director');
+    // Exclude managers, admins, CEOs, directors and coordinators outright
+    const isExcluded = ['manager', 'admin', 'ceo', 'director', 'coordinator']
+      .some(k => lowerRole.includes(k) || lowerDesig.includes(k));
 
-    if (isSalesExecRole || isSalesExecDesig || isSalesDeptExec) {
+    if ((isSalesExecRole || isSalesExecDesig) && !isExcluded) {
       eligible.push({
         id: emp.id,
         firstName: emp.firstName,
@@ -83,7 +79,8 @@ export async function getEligibleSalesExecutives(tx?: Prisma.TransactionClient):
         email: emp.user?.email || '',
         roleName: roleName || desigName || 'Sales Executive',
         departmentName: deptName,
-        designationName: desigName
+        designationName: desigName,
+        createdAt: emp.createdAt
       });
     }
   }
@@ -184,7 +181,10 @@ export async function assignLeadAutomatically(leadId: string): Promise<{
   lead: any;
 }> {
   return prisma.$transaction(async (tx) => {
-    // 1. Fetch lead
+    // 0. Lock the lead row so manual and automatic assignment serialize
+    await tx.$executeRaw`SELECT id FROM "SalesLead" WHERE id = ${leadId} FOR UPDATE`;
+
+    // 1. Fetch lead (after lock, so state is authoritative)
     const lead = await tx.salesLead.findUnique({
       where: { id: leadId },
       include: {
@@ -304,24 +304,31 @@ export async function assignLeadAutomatically(leadId: string): Promise<{
       };
     }
 
-    // 5. Strict sequential Round Robin order
-    // Sort executives deterministically by ID to ensure a stable, fixed sequence
-    eligibleExecutives.sort((a, b) => a.id.localeCompare(b.id));
-
+    // 5. Strict sequential Round Robin in CRM display order (createdAt asc, id asc).
+    // getEligibleSalesExecutives already returns this order.
     const lastAssignedId = settings?.lastAssignedLeadExecId;
     let nextIndex = 0;
 
     if (lastAssignedId) {
       const currentIndex = eligibleExecutives.findIndex(e => e.id === lastAssignedId);
       if (currentIndex >= 0) {
-        // Next executive in circular sequence
         nextIndex = (currentIndex + 1) % eligibleExecutives.length;
       } else {
-        // If the previously assigned executive is now inactive/unavailable, start from index 0
-        nextIndex = 0;
+        // Previous executive is no longer eligible: continue with the first eligible
+        // executive positioned after them in the fixed order; wrap to start if none.
+        const lastEmp = await tx.employee.findUnique({
+          where: { id: lastAssignedId },
+          select: { id: true, createdAt: true }
+        });
+        if (lastEmp) {
+          const idx = eligibleExecutives.findIndex(e => {
+            const ec = e.createdAt ? e.createdAt.getTime() : 0;
+            const lc = lastEmp.createdAt.getTime();
+            return ec > lc || (ec === lc && e.id.localeCompare(lastEmp.id) > 0);
+          });
+          nextIndex = idx >= 0 ? idx : 0;
+        }
       }
-    } else {
-      nextIndex = 0;
     }
 
     const selectedCandidate = eligibleExecutives[nextIndex];
@@ -399,6 +406,9 @@ export async function assignLeadManually(
   history: any;
 }> {
   return prisma.$transaction(async (tx) => {
+    // Lock the lead row so a concurrent automatic assignment cannot interleave
+    await tx.$executeRaw`SELECT id FROM "SalesLead" WHERE id = ${leadId} FOR UPDATE`;
+
     const lead = await tx.salesLead.findUnique({
       where: { id: leadId },
       include: { assignedTo: true, customer: true }
@@ -416,6 +426,9 @@ export async function assignLeadManually(
       });
       if (!targetEmployee) {
         throw new Error(`Target employee with ID ${targetEmployeeId} not found`);
+      }
+      if (targetEmployee.status !== 'ACTIVE' || targetEmployee.user?.isActive === false) {
+        throw new Error('Cannot assign lead to an inactive or deleted employee');
       }
     }
 
