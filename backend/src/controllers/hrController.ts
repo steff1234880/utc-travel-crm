@@ -51,10 +51,11 @@ export const getHRStats = async (req: Request, res: Response) => {
 export const createEmployee = async (req: Request, res: Response) => {
   try {
     const data = createEmployeeSchema.parse(req.body);
+    const normalizedEmail = data.email.trim().toLowerCase();
     
     // Check if user or active employee with email already exists
     const existingUser = await prisma.user.findUnique({ 
-      where: { email: data.email },
+      where: { email: normalizedEmail },
       include: { employee: true }
     });
 
@@ -70,8 +71,36 @@ export const createEmployee = async (req: Request, res: Response) => {
             isActive: false
           }
         });
+      } else if (!existingUser.employee && !existingUser.isActive) {
+        // Orphaned deactivated user record (e.g. from previous deletion/cleanup)
+        const timestamp = Date.now();
+        await prisma.user.update({
+          where: { id: existingUser.id },
+          data: {
+            email: `deleted_${timestamp}_${existingUser.email}`,
+            isActive: false
+          }
+        });
       } else {
         return res.status(400).json({ success: false, message: 'User or employee with this email address already exists' });
+      }
+    }
+
+    // Check Employee ID uniqueness among non-deleted employees
+    const existingEmployee = await prisma.employee.findUnique({ where: { employeeId: data.employeeId } });
+    if (existingEmployee) {
+      if (existingEmployee.status === 'DELETED') {
+        // The previous employee with this ID was soft-deleted.
+        // Free up the employeeId so the new employee can take it.
+        const timestamp = Date.now();
+        await prisma.employee.update({
+          where: { id: existingEmployee.id },
+          data: {
+            employeeId: `deleted_${timestamp}_${existingEmployee.employeeId}`
+          }
+        });
+      } else {
+        return res.status(400).json({ success: false, message: 'Employee ID already exists' });
       }
     }
 
@@ -105,7 +134,7 @@ export const createEmployee = async (req: Request, res: Response) => {
     
     const user = await prisma.user.create({
       data: {
-        email: data.email,
+        email: normalizedEmail,
         passwordHash,
         roleId: role.id,
         isActive: data.status === 'ACTIVE'
@@ -136,11 +165,6 @@ export const createEmployee = async (req: Request, res: Response) => {
         });
       }
       designationId = designation.id;
-    }
-
-    const existingEmployee = await prisma.employee.findUnique({ where: { employeeId: data.employeeId } });
-    if (existingEmployee) {
-      return res.status(400).json({ success: false, message: 'Employee ID already exists' });
     }
 
     const employee = await prisma.employee.create({
@@ -434,22 +458,31 @@ export const deleteEmployee = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: 'Employee not found' });
     }
 
-    await prisma.employee.update({
-      where: { id },
-      data: { status: 'DELETED' }
-    });
+    const timestamp = Date.now();
+    const releasedEmployeeId = `deleted_${timestamp}_${existingEmployee.employeeId}`;
 
-    if (existingEmployee.userId) {
-      const timestamp = Date.now();
-      const anonymizedEmail = `deleted_${timestamp}_${existingEmployee.user?.email || existingEmployee.userId}`;
-      await prisma.user.update({
-        where: { id: existingEmployee.userId },
+    await prisma.$transaction(async (tx) => {
+      // 1. Soft-delete employee and release employeeId so it can be reused immediately
+      await tx.employee.update({
+        where: { id },
         data: { 
-          email: anonymizedEmail,
-          isActive: false 
+          status: 'DELETED',
+          employeeId: releasedEmployeeId
         }
       });
-    }
+
+      // 2. Anonymize user email and deactivate account to free up the email for reuse
+      if (existingEmployee.userId) {
+        const anonymizedEmail = `deleted_${timestamp}_${existingEmployee.user?.email || existingEmployee.userId}`;
+        await tx.user.update({
+          where: { id: existingEmployee.userId },
+          data: { 
+            email: anonymizedEmail,
+            isActive: false 
+          }
+        });
+      }
+    });
 
     await logAudit({
       req,
