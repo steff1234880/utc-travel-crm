@@ -60,19 +60,11 @@ export const createEmployee = async (req: Request, res: Response) => {
     });
 
     if (existingUser) {
-      if (existingUser.employee && existingUser.employee.status === 'DELETED') {
-        // The previous employee associated with this User was soft-deleted.
+      const isAssociatedWithActiveEmployee = existingUser.employee && existingUser.employee.status !== 'DELETED';
+      if (!isAssociatedWithActiveEmployee) {
+        // The previous employee associated with this User was soft-deleted,
+        // or this is an orphaned/leftover user record without an active employee.
         // Free up the email on the archived user record so the new employee can use it cleanly.
-        const timestamp = Date.now();
-        await prisma.user.update({
-          where: { id: existingUser.id },
-          data: {
-            email: `deleted_${timestamp}_${existingUser.email}`,
-            isActive: false
-          }
-        });
-      } else if (!existingUser.employee && !existingUser.isActive) {
-        // Orphaned deactivated user record (e.g. from previous deletion/cleanup)
         const timestamp = Date.now();
         await prisma.user.update({
           where: { id: existingUser.id },
