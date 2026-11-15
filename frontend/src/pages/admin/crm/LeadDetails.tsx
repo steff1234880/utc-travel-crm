@@ -36,6 +36,7 @@ const LeadDetails = () => {
   const [editingFollowUp, setEditingFollowUp] = useState<any>(null);
   const [assignmentHistories, setAssignmentHistories] = useState<any[]>([]);
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [accessDeniedError, setAccessDeniedError] = useState<string | null>(null);
 
   const canAssignLeads = hasRole(['Sales Manager', 'CEO / Super Admin', 'Admin', 'ADMIN', 'SUPER_ADMIN']) ||
     hasPermission('sales_crm:manage') ||
@@ -72,17 +73,25 @@ const LeadDetails = () => {
   };
 
   const fetchLead = async () => {
+    setAccessDeniedError(null);
     try {
-      const [leadRes, timelineRes, historyRes] = await Promise.all([
-        api.get(`/crm/leads/${id}`),
-        timelineService.getTimeline('LEAD', id!),
+      const leadRes = await api.get(`/crm/leads/${id}`);
+      const [timelineRes, historyRes] = await Promise.all([
+        timelineService.getTimeline('LEAD', id!).catch(() => []),
         api.get(`/crm/leads/${id}/assignment-history`).catch(() => ({ data: { data: [] } }))
       ]);
       setLead(leadRes.data.data);
       setTimelineEvents(timelineRes);
       setAssignmentHistories(historyRes.data?.data || []);
-    } catch (error) {
-      console.error('Failed to fetch lead', error);
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        setAccessDeniedError(
+          error.response?.data?.error ||
+          'Access denied: You can only view and manage leads assigned to you.'
+        );
+      } else {
+        console.error('Failed to fetch lead', error);
+      }
     } finally {
       setLoading(false);
     }
@@ -146,6 +155,22 @@ const LeadDetails = () => {
   };
 
   if (loading) return <div className="p-4 sm:p-8 w-full min-w-0 text-center text-gray-500">Loading lead details...</div>;
+  if (accessDeniedError) {
+    return (
+      <div className="p-4 sm:p-8 w-full min-w-0 max-w-2xl mx-auto">
+        <button
+          onClick={() => navigate('/admin/crm/pipeline')}
+          className="flex items-center gap-2 text-gray-500 hover:text-gray-900 mb-6 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back to Pipeline
+        </button>
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center">
+          <p className="text-red-800 font-bold text-base mb-1">Unauthorized Lead Access</p>
+          <p className="text-red-600 text-sm">{accessDeniedError}</p>
+        </div>
+      </div>
+    );
+  }
   if (!lead) return <div className="p-4 sm:p-8 w-full min-w-0 text-center text-red-500">Lead not found</div>;
 
   return (
@@ -214,7 +239,9 @@ const LeadDetails = () => {
                     <p className="font-bold text-sm text-gray-900">
                       {lead.assignedTo.firstName} {lead.assignedTo.lastName}
                     </p>
-                    <p className="text-xs text-gray-400">Sales Executive</p>
+                    <p className="text-xs text-gray-400">
+                      {lead.assignedTo.user?.role?.name || lead.assignedTo.designation?.name || 'Sales Representative'}
+                    </p>
                   </div>
                 </div>
                 {lead.assignedAt && (

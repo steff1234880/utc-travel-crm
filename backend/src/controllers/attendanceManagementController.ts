@@ -47,26 +47,39 @@ export async function getOrCreateEmployeeForUser(userId: string) {
   let employee = await prisma.employee.findUnique({
     where: { userId }
   });
-  if (!employee) {
-    const user = await prisma.user.findUnique({
-      where: { id: userId }
-    });
-    if (!user) return null;
-    const nameParts = user.email.split('@')[0].trim().split('.');
-    const firstName = nameParts[0] || 'Staff';
-    const lastName = nameParts.slice(1).join(' ') || 'Member';
-    const empCount = await prisma.employee.count();
-    const empId = `EMP${String(empCount + 1).padStart(4, '0')}`;
-    employee = await prisma.employee.create({
-      data: {
-        userId: user.id,
-        employeeId: empId,
-        firstName,
-        lastName,
-        joiningDate: new Date()
-      }
-    });
+  if (employee) {
+    if (employee.status === 'DELETED') {
+      return null;
+    }
+    return employee;
   }
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { role: true }
+  });
+  if (!user || !user.isActive || user.email.startsWith('deleted_')) return null;
+
+  // Only auto-create an employee profile for active system administrators who may not have an HR profile yet
+  const roleName = (user.role?.name || '').toUpperCase().trim();
+  const isAdmin = roleName === 'ADMIN' || roleName === 'SUPER_ADMIN' || roleName.includes('SUPER') || roleName.includes('CEO');
+  if (!isAdmin) {
+    return null;
+  }
+
+  const nameParts = user.email.split('@')[0].trim().split('.');
+  const firstName = nameParts[0] || 'Staff';
+  const lastName = nameParts.slice(1).join(' ') || 'Member';
+  const empCount = await prisma.employee.count();
+  const empId = `EMP${String(empCount + 1).padStart(4, '0')}`;
+  employee = await prisma.employee.create({
+    data: {
+      userId: user.id,
+      employeeId: empId,
+      firstName,
+      lastName,
+      joiningDate: new Date()
+    }
+  });
   return employee;
 }
 

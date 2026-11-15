@@ -24,11 +24,12 @@ export const TERMINAL_STATUSES = ['WON', 'LOST', 'CLOSED', 'ARCHIVED'];
 export const TERMINAL_STAGES = ['Won', 'Lost', 'Closed', 'WON', 'LOST', 'CLOSED'];
 
 /**
- * Find all active, eligible Sales Executives.
+ * Find all active, eligible Sales Executives and Sales Managers.
  * Rules:
  * - Employee status must be 'ACTIVE'
  * - Linked User must be active (isActive === true)
- * - Must belong to Sales Executive role, designation, or department (excluding managers)
+ * - Must belong to Sales Executive or Sales Manager role or designation (excluding admins, CEOs, directors, and coordinators)
+ * - Sorted by ID ascending for deterministic sequential round-robin ordering
  */
 export async function getEligibleSalesExecutives(tx?: Prisma.TransactionClient): Promise<EligibleExecutive[]> {
   const db = tx || prisma;
@@ -48,8 +49,8 @@ export async function getEligibleSalesExecutives(tx?: Prisma.TransactionClient):
       department: true,
       designation: true
     },
-    // Display order in the CRM: creation order with stable id tie-breaker
-    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }]
+    // Sort eligible users by ID ascending
+    orderBy: [{ id: 'asc' }]
   });
 
   const eligible: EligibleExecutive[] = [];
@@ -59,25 +60,30 @@ export async function getEligibleSalesExecutives(tx?: Prisma.TransactionClient):
     const desigName = emp.designation?.name || '';
     const deptName = emp.department?.name || '';
 
-    const lowerRole = roleName.toLowerCase();
-    const lowerDesig = desigName.toLowerCase();
-    const lowerDept = deptName.toLowerCase();
+    const lowerRole = roleName.toLowerCase().trim();
+    const lowerDesig = desigName.toLowerCase().trim();
 
-    // Check if role or designation is Sales Executive
+    // Check if role or designation is Sales Executive or Sales Manager
     const isSalesExecRole = lowerRole.includes('sales executive') || lowerRole === 'sales_executive';
     const isSalesExecDesig = lowerDesig.includes('sales executive');
-    
-    // Exclude managers, admins, CEOs, directors and coordinators outright
-    const isExcluded = ['manager', 'admin', 'ceo', 'director', 'coordinator']
+    const isSalesManagerRole = lowerRole.includes('sales manager') || lowerRole === 'sales_manager';
+    const isSalesManagerDesig = lowerDesig.includes('sales manager');
+
+    // Exclude admins, CEOs, directors, and coordinators outright
+    const isExcluded = ['admin', 'ceo', 'director', 'coordinator']
       .some(k => lowerRole.includes(k) || lowerDesig.includes(k));
 
-    if ((isSalesExecRole || isSalesExecDesig) && !isExcluded) {
+    if ((isSalesExecRole || isSalesExecDesig || isSalesManagerRole || isSalesManagerDesig) && !isExcluded) {
+      const resolvedRoleName = (isSalesManagerRole || isSalesManagerDesig)
+        ? (roleName || desigName || 'Sales Manager')
+        : (roleName || desigName || 'Sales Executive');
+
       eligible.push({
         id: emp.id,
         firstName: emp.firstName,
         lastName: emp.lastName,
         email: emp.user?.email || '',
-        roleName: roleName || desigName || 'Sales Executive',
+        roleName: resolvedRoleName,
         departmentName: deptName,
         designationName: desigName,
         createdAt: emp.createdAt
@@ -85,6 +91,7 @@ export async function getEligibleSalesExecutives(tx?: Prisma.TransactionClient):
     }
   }
 
+  eligible.sort((a, b) => a.id.localeCompare(b.id));
   return eligible;
 }
 
@@ -304,8 +311,8 @@ export async function assignLeadAutomatically(leadId: string): Promise<{
       };
     }
 
-    // 5. Strict sequential Round Robin in CRM display order (createdAt asc, id asc).
-    // getEligibleSalesExecutives already returns this order.
+    // 5. Strict sequential Round Robin sorted by ID ascending.
+    // getEligibleSalesExecutives already returns eligible users sorted by id asc.
     const lastAssignedId = settings?.lastAssignedLeadExecId;
     let nextIndex = 0;
 
@@ -314,20 +321,10 @@ export async function assignLeadAutomatically(leadId: string): Promise<{
       if (currentIndex >= 0) {
         nextIndex = (currentIndex + 1) % eligibleExecutives.length;
       } else {
-        // Previous executive is no longer eligible: continue with the first eligible
-        // executive positioned after them in the fixed order; wrap to start if none.
-        const lastEmp = await tx.employee.findUnique({
-          where: { id: lastAssignedId },
-          select: { id: true, createdAt: true }
-        });
-        if (lastEmp) {
-          const idx = eligibleExecutives.findIndex(e => {
-            const ec = e.createdAt ? e.createdAt.getTime() : 0;
-            const lc = lastEmp.createdAt.getTime();
-            return ec > lc || (ec === lc && e.id.localeCompare(lastEmp.id) > 0);
-          });
-          nextIndex = idx >= 0 ? idx : 0;
-        }
+        // Previous assignee is no longer eligible (inactive/deleted): continue with the first
+        // eligible user whose ID comes after lastAssignedId, or wrap around to index 0.
+        const idx = eligibleExecutives.findIndex(e => e.id.localeCompare(lastAssignedId) > 0);
+        nextIndex = idx >= 0 ? idx : 0;
       }
     }
 
@@ -378,6 +375,19 @@ export async function assignLeadAutomatically(leadId: string): Promise<{
       }
     });
 
+    // 9. Maintain enquiry-to-lead ownership synchronization if lead is linked to an enquiry
+    if (lead.enquiryId) {
+      await tx.enquiryAssignment.deleteMany({
+        where: { enquiryId: lead.enquiryId }
+      });
+      await tx.enquiryAssignment.create({
+        data: {
+          enquiryId: lead.enquiryId,
+          employeeId: selectedCandidate.id
+        }
+      });
+    }
+
     return {
       assigned: true,
       assignedTo: selectedCandidate,
@@ -422,7 +432,7 @@ export async function assignLeadManually(
     if (targetEmployeeId) {
       targetEmployee = await tx.employee.findUnique({
         where: { id: targetEmployeeId },
-        include: { user: true }
+        include: { user: { include: { role: true } }, designation: true }
       });
       if (!targetEmployee) {
         throw new Error(`Target employee with ID ${targetEmployeeId} not found`);
@@ -430,10 +440,34 @@ export async function assignLeadManually(
       if (targetEmployee.status !== 'ACTIVE' || targetEmployee.user?.isActive === false) {
         throw new Error('Cannot assign lead to an inactive or deleted employee');
       }
+      const eligiblePool = await getEligibleSalesExecutives(tx);
+      if (!eligiblePool.some(e => e.id === targetEmployeeId)) {
+        throw new Error('Target employee is not an eligible active Sales Executive or Sales Manager');
+      }
     }
 
     const previousAssigneeId = lead.assignedToId;
     const now = new Date();
+
+    // Prevent duplicate assignment records if the lead is already assigned to the exact same employee
+    if (previousAssigneeId && targetEmployeeId && previousAssigneeId === targetEmployeeId) {
+      const latestHistory = await tx.leadAssignmentHistory.findFirst({
+        where: { salesLeadId: leadId },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          assignedTo: true,
+          previousAssignee: true,
+          assignedBy: {
+            select: { id: true, email: true }
+          }
+        }
+      });
+      return {
+        success: true,
+        lead,
+        history: latestHistory
+      };
+    }
 
     const updatedLead = await tx.salesLead.update({
       where: { id: leadId },
@@ -491,6 +525,21 @@ export async function assignLeadManually(
       });
     }
 
+    // Maintain enquiry-to-lead ownership synchronization if lead is linked to an enquiry
+    if (lead.enquiryId) {
+      await tx.enquiryAssignment.deleteMany({
+        where: { enquiryId: lead.enquiryId }
+      });
+      if (targetEmployeeId) {
+        await tx.enquiryAssignment.create({
+          data: {
+            enquiryId: lead.enquiryId,
+            employeeId: targetEmployeeId
+          }
+        });
+      }
+    }
+
     return {
       success: true,
       lead: updatedLead,
@@ -506,7 +555,7 @@ export async function assignLeadManually(
  * Get comprehensive lead assignment overview, team workload, and unassigned leads queue.
  */
 export async function getAssignmentOverview() {
-  const [settings, workload, unassignedCount, unassignedLeads, recentHistory] = await Promise.all([
+  const [settings, workload, unassignedCount, unassignedLeads, recentHistory, rawLeads] = await Promise.all([
     prisma.systemSettings.findUnique({
       where: { id: 'default' },
       select: { autoAssignLeads: true, lastAssignedLeadExecId: true }
@@ -553,20 +602,96 @@ export async function getAssignmentOverview() {
           select: { id: true, email: true }
         }
       }
+    }),
+    prisma.salesLead.findMany({
+      where: {
+        status: { notIn: ['ARCHIVED', 'DELETED'] }
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        title: true,
+        source: true,
+        status: true,
+        assignmentType: true,
+        assignedToId: true,
+        assignedAt: true,
+        createdAt: true,
+        pipelineStage: {
+          select: { id: true, name: true, color: true }
+        },
+        assignedTo: {
+          select: {
+            id: true,
+            employeeId: true,
+            firstName: true,
+            lastName: true,
+            designation: { select: { name: true } },
+            user: {
+              select: {
+                email: true,
+                role: { select: { name: true } }
+              }
+            }
+          }
+        }
+      }
     })
   ]);
+
+  const leads = rawLeads.map((lead) => {
+    const rawRoleName = lead.assignedTo?.user?.role?.name || lead.assignedTo?.designation?.name || '';
+    const isManager =
+      rawRoleName.toLowerCase().includes('manager') ||
+      rawRoleName.toUpperCase() === 'SALES_MANAGER';
+    const assignedEmployeeRole = lead.assignedTo
+      ? (isManager ? 'Sales Manager' : 'Sales Executive')
+      : null;
+    const assignedEmployeeName = lead.assignedTo
+      ? `${lead.assignedTo.firstName} ${lead.assignedTo.lastName}`.trim()
+      : 'Unassigned';
+    const assignmentStatus = lead.assignedToId
+      ? (lead.assignmentType === 'MANUAL' ? 'MANUAL' : 'AUTOMATIC')
+      : 'UNASSIGNED';
+
+    return {
+      id: lead.id,
+      title: lead.title,
+      source: lead.source,
+      status: lead.status,
+      assignmentType: lead.assignmentType,
+      assignmentStatus,
+      assignedToId: lead.assignedToId,
+      assignedEmployeeName,
+      assignedEmployeeRole,
+      assignedAt: lead.assignedAt,
+      createdAt: lead.createdAt,
+      pipelineStage: lead.pipelineStage,
+      assignedTo: lead.assignedTo
+        ? {
+            id: lead.assignedTo.id,
+            employeeId: lead.assignedTo.employeeId,
+            firstName: lead.assignedTo.firstName,
+            lastName: lead.assignedTo.lastName,
+            roleName: assignedEmployeeRole
+          }
+        : null
+    };
+  });
 
   const totalActiveWorkload = workload.reduce((sum, w) => sum + w.activeLeadsCount, 0);
   const totalWonLeads = workload.reduce((sum, w) => sum + w.wonLeadsCount, 0);
 
   return {
     autoAssignEnabled: settings ? settings.autoAssignLeads : true,
+    lastAssignedLeadExecId: settings?.lastAssignedLeadExecId || null,
     totalActiveWorkload,
     totalWonLeads,
     unassignedCount,
     executives: workload,
     unassignedLeads,
-    recentHistory
+    recentHistory,
+    leads
   };
 }
 

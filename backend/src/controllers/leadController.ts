@@ -24,6 +24,116 @@ const createLeadSchema = z.object({
   pipelineStage: z.string().optional()
 });
 
+export interface LeadAccessContext {
+  roleName: string;
+  normalizedRole: string;
+  isSuperOrAdmin: boolean;
+  isSalesManager: boolean;
+  isSalesExecutive: boolean;
+  isOwnLeadsOnlyRole: boolean;
+  employeeId: string | null;
+}
+
+export async function getLeadAccessContext(req: Request): Promise<LeadAccessContext> {
+  let roleName = req.user?.roleName || '';
+  if (!roleName && req.user?.roleId) {
+    const userRole = await prisma.role.findUnique({ where: { id: req.user.roleId } });
+    roleName = userRole?.name || '';
+  }
+
+  const normalizedRole = roleName.toUpperCase().trim().replace(/[\s_-]+/g, '_');
+
+  const isSuperOrAdmin =
+    normalizedRole === 'ADMIN' ||
+    normalizedRole === 'SUPER_ADMIN' ||
+    normalizedRole === 'CEO_/_SUPER_ADMIN' ||
+    normalizedRole.includes('SUPER') ||
+    normalizedRole.includes('CEO');
+
+  const isSalesManager =
+    !isSuperOrAdmin &&
+    (normalizedRole === 'SALES_MANAGER' || roleName.toLowerCase().trim() === 'sales manager');
+
+  const isSalesExecutive =
+    !isSuperOrAdmin &&
+    !isSalesManager &&
+    (normalizedRole === 'SALES_EXECUTIVE' || roleName.toLowerCase().trim() === 'sales executive');
+
+  const isOwnLeadsOnlyRole = !isSuperOrAdmin && (isSalesManager || isSalesExecutive);
+
+  let employeeId: string | null = null;
+  if (req.user?.userId) {
+    const employee = await prisma.employee.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true }
+    });
+    employeeId = employee?.id || null;
+  }
+
+  return {
+    roleName,
+    normalizedRole,
+    isSuperOrAdmin,
+    isSalesManager,
+    isSalesExecutive,
+    isOwnLeadsOnlyRole,
+    employeeId
+  };
+}
+
+export async function verifyLeadOwnership(
+  leadId: string,
+  req: Request
+): Promise<{
+  allowed: boolean;
+  statusCode: number;
+  error?: string;
+  lead?: any;
+  context: LeadAccessContext;
+}> {
+  const context = await getLeadAccessContext(req);
+  const lead = await prisma.salesLead.findUnique({
+    where: { id: leadId }
+  });
+
+  if (!lead) {
+    return {
+      allowed: false,
+      statusCode: 404,
+      error: 'Lead not found',
+      context
+    };
+  }
+
+  if (context.isSuperOrAdmin) {
+    return {
+      allowed: true,
+      statusCode: 200,
+      lead,
+      context
+    };
+  }
+
+  if (context.isOwnLeadsOnlyRole) {
+    if (!context.employeeId || !lead.assignedToId || lead.assignedToId !== context.employeeId) {
+      return {
+        allowed: false,
+        statusCode: 403,
+        error: 'Access denied: You can only view and manage leads assigned to you.',
+        lead,
+        context
+      };
+    }
+  }
+
+  return {
+    allowed: true,
+    statusCode: 200,
+    lead,
+    context
+  };
+}
+
 export const getLeads = async (req: Request, res: Response) => {
   try {
     const { status, pipelineStageId, assignedToId } = req.query;
@@ -32,14 +142,10 @@ export const getLeads = async (req: Request, res: Response) => {
     if (pipelineStageId) where.pipelineStageId = String(pipelineStageId);
     if (assignedToId) where.assignedToId = String(assignedToId);
 
-    // If user is Sales Executive, only show their leads
-    const userRole = await prisma.role.findUnique({ where: { id: req.user!.roleId! } });
-    const normalizedRole = (userRole?.name || '').toUpperCase().trim();
-    if (normalizedRole === 'SALES_EXECUTIVE' || normalizedRole === 'SALES EXECUTIVE') {
-      const employee = await prisma.employee.findUnique({ where: { userId: req.user!.userId } });
-      if (employee) {
-        where.assignedToId = employee.id;
-      }
+    // Sales Executives and Sales Managers can only open and view their own assigned leads
+    const access = await getLeadAccessContext(req);
+    if (access.isOwnLeadsOnlyRole) {
+      where.assignedToId = access.employeeId || '__NO_ASSIGNED_LEADS__';
     }
 
     const leads = await prisma.salesLead.findMany({
@@ -60,12 +166,27 @@ export const getLeads = async (req: Request, res: Response) => {
 export const getLeadById = async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
+    const ownership = await verifyLeadOwnership(id, req);
+    if (!ownership.allowed) {
+      return res.status(ownership.statusCode).json({ success: false, error: ownership.error });
+    }
+
     const lead = await prisma.salesLead.findUnique({
       where: { id },
       include: {
         customer: true,
         pipelineStage: true,
-        assignedTo: true,
+        assignedTo: {
+          include: {
+            designation: true,
+            user: {
+              select: {
+                email: true,
+                role: { select: { name: true } }
+              }
+            }
+          }
+        },
         requirements: true,
         quotations: true,
         activities: { include: { employee: true }, orderBy: { createdAt: 'desc' } }
@@ -110,6 +231,16 @@ export const createLead = async (req: Request, res: Response) => {
         actualPipelineStageId = stage.id;
       }
     }
+
+    if (leadData.assignedToId) {
+      const targetEmployee = await prisma.employee.findUnique({
+        where: { id: leadData.assignedToId },
+        include: { user: true }
+      });
+      if (!targetEmployee || targetEmployee.status !== 'ACTIVE' || targetEmployee.user?.isActive === false) {
+        return res.status(400).json({ success: false, error: 'Cannot assign lead to an inactive or deleted employee' });
+      }
+    }
     
     const lead = await prisma.salesLead.create({ 
       data: {
@@ -126,7 +257,7 @@ export const createLead = async (req: Request, res: Response) => {
       include: { customer: true, pipelineStage: true, assignedTo: true, requirements: true }
     });
 
-    // If an executive was manually specified during creation, log the manual assignment
+    // If an employee was manually specified during creation, log the manual assignment and sync enquiry if linked
     if (leadData.assignedToId) {
       await prisma.leadAssignmentHistory.create({
         data: {
@@ -137,6 +268,17 @@ export const createLead = async (req: Request, res: Response) => {
           reason: 'Manually assigned upon lead creation'
         }
       });
+
+      if (lead.enquiryId) {
+        await prisma.enquiryAssignment.deleteMany({ where: { enquiryId: lead.enquiryId } });
+        await prisma.enquiryAssignment.create({
+          data: {
+            enquiryId: lead.enquiryId,
+            employeeId: leadData.assignedToId
+          }
+        });
+      }
+
       res.status(201).json({ success: true, data: lead });
     } else {
       // Trigger automatic assignment engine
@@ -154,6 +296,11 @@ export const updateLeadStage = async (req: Request, res: Response) => {
     const { pipelineStageId } = req.body;
     
     if (!pipelineStageId) return res.status(400).json({ success: false, error: 'pipelineStageId is required' });
+
+    const ownership = await verifyLeadOwnership(id, req);
+    if (!ownership.allowed) {
+      return res.status(ownership.statusCode).json({ success: false, error: ownership.error });
+    }
 
     const lead = await prisma.salesLead.update({
       where: { id },
@@ -215,6 +362,11 @@ const updateFollowUpSchema = z.object({
 export const createFollowUp = async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string; // lead ID
+    const ownership = await verifyLeadOwnership(id, req);
+    if (!ownership.allowed) {
+      return res.status(ownership.statusCode).json({ success: false, error: ownership.error });
+    }
+
     const data = createFollowUpSchema.parse(req.body);
     
     const user = await prisma.user.findUnique({
@@ -247,7 +399,22 @@ export const createFollowUp = async (req: Request, res: Response) => {
 
 export const updateFollowUp = async (req: Request, res: Response) => {
   try {
+    const id = req.params.id as string;
     const followUpId = req.params.followUpId as string;
+
+    const existingFollowUp = await prisma.followUp.findUnique({ where: { id: followUpId } });
+    if (!existingFollowUp) {
+      return res.status(404).json({ success: false, error: 'Follow-up not found' });
+    }
+
+    const targetLeadId = existingFollowUp.salesLeadId || id;
+    if (targetLeadId) {
+      const ownership = await verifyLeadOwnership(targetLeadId, req);
+      if (!ownership.allowed) {
+        return res.status(ownership.statusCode).json({ success: false, error: ownership.error });
+      }
+    }
+
     const data = updateFollowUpSchema.parse(req.body);
 
     const updateData: any = { ...data };
@@ -270,7 +437,22 @@ export const updateFollowUp = async (req: Request, res: Response) => {
 
 export const deleteFollowUp = async (req: Request, res: Response) => {
   try {
+    const id = req.params.id as string;
     const followUpId = req.params.followUpId as string;
+
+    const existingFollowUp = await prisma.followUp.findUnique({ where: { id: followUpId } });
+    if (!existingFollowUp) {
+      return res.status(404).json({ success: false, error: 'Follow-up not found' });
+    }
+
+    const targetLeadId = existingFollowUp.salesLeadId || id;
+    if (targetLeadId) {
+      const ownership = await verifyLeadOwnership(targetLeadId, req);
+      if (!ownership.allowed) {
+        return res.status(ownership.statusCode).json({ success: false, error: ownership.error });
+      }
+    }
+
     await prisma.followUp.delete({
       where: { id: followUpId }
     });
@@ -296,6 +478,11 @@ const updateLeadSchema = z.object({
 export const updateLead = async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
+    const ownership = await verifyLeadOwnership(id, req);
+    if (!ownership.allowed) {
+      return res.status(ownership.statusCode).json({ success: false, error: ownership.error });
+    }
+
     const data = updateLeadSchema.parse(req.body);
 
     const existingLead = await prisma.salesLead.findUnique({
@@ -402,6 +589,10 @@ export const updateLead = async (req: Request, res: Response) => {
 export const deleteLead = async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
+    const ownership = await verifyLeadOwnership(id, req);
+    if (!ownership.allowed) {
+      return res.status(ownership.statusCode).json({ success: false, error: ownership.error });
+    }
     
     const existingLead = await prisma.salesLead.findUnique({
       where: { id }
@@ -474,6 +665,14 @@ export const assignLeadController = async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, error: 'Authentication required' });
     }
 
+    const access = await getLeadAccessContext(req);
+    if (!access.isSuperOrAdmin && !access.isSalesManager) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied: Only Sales Managers, Admins, and Super Admins can assign or reassign leads.'
+      });
+    }
+
     const result = await assignLeadManually(id, body.employeeId || null, userId, body.reason);
     res.json({ success: true, data: result.lead, history: result.history });
   } catch (error: any) {
@@ -485,6 +684,11 @@ export const assignLeadController = async (req: Request, res: Response) => {
 export const getLeadAssignmentHistoryController = async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
+    const ownership = await verifyLeadOwnership(id, req);
+    if (!ownership.allowed) {
+      return res.status(ownership.statusCode).json({ success: false, error: ownership.error });
+    }
+
     const history = await getLeadAssignmentHistory(id);
     res.json({ success: true, data: history });
   } catch (error: any) {

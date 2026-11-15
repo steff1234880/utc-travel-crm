@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import prisma from '../utils/prisma';
+import { getLeadAccessContext } from './leadController';
 
 export const getSalesDashboardMetrics = async (req: Request, res: Response) => {
   try {
@@ -126,8 +127,7 @@ export const getSalesDashboardMetrics = async (req: Request, res: Response) => {
 
 export const getSalesPipeline = async (req: Request, res: Response) => {
   try {
-    const userRole = await prisma.role.findUnique({ where: { id: req.user?.roleId || '' } });
-    const normalizedRole = (userRole?.name || '').toUpperCase().trim();
+    const access = await getLeadAccessContext(req);
     let leadFilter: Prisma.SalesLeadWhereInput = {
       status: { notIn: ['ARCHIVED', 'DELETED'] },
       OR: [
@@ -135,14 +135,11 @@ export const getSalesPipeline = async (req: Request, res: Response) => {
         { assignedTo: { status: 'ACTIVE' } }
       ]
     };
-    if (normalizedRole === 'SALES_EXECUTIVE' || normalizedRole === 'SALES EXECUTIVE') {
-      const employee = await prisma.employee.findUnique({ where: { userId: req.user!.userId } });
-      if (employee) {
-        leadFilter = {
-          ...leadFilter,
-          assignedToId: employee.id
-        };
-      }
+    if (access.isOwnLeadsOnlyRole) {
+      leadFilter = {
+        status: { notIn: ['ARCHIVED', 'DELETED'] },
+        assignedToId: access.employeeId || '__NO_ASSIGNED_LEADS__'
+      };
     }
 
     const stages = await prisma.salesPipelineStage.findMany({

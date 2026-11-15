@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { verifyLeadOwnership } from './leadController';
 
 const prisma = new PrismaClient();
 
@@ -42,6 +43,12 @@ export const getTimeline = async (req: Request, res: Response): Promise<void> =>
         ];
       }
     } else if (entityType.toUpperCase() === 'LEAD') {
+      const ownership = await verifyLeadOwnership(entityId, req);
+      if (!ownership.allowed) {
+        res.status(ownership.statusCode).json({ success: false, error: ownership.error });
+        return;
+      }
+
       const lead = await prisma.salesLead.findUnique({
         where: { id: entityId },
         include: {

@@ -144,9 +144,9 @@ export default function LeadAssignmentModal({
           {/* Executive Selection */}
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
-              <span>Select Sales Executive</span>
+              <span>Select Sales Representative</span>
               <span className="text-[11px] font-normal text-slate-400">
-                Sorted by active workload
+                Active Sales Team
               </span>
             </label>
             {fetchingTeam ? (
@@ -162,7 +162,7 @@ export default function LeadAssignmentModal({
                 <option value="">-- Unassigned (Keep in Queue) --</option>
                 {executives.map((exec) => (
                   <option key={exec.id} value={exec.id}>
-                    {exec.firstName} {exec.lastName} ({exec.activeLeadsCount} active lead{exec.activeLeadsCount === 1 ? '' : 's'})
+                    {exec.firstName} {exec.lastName} — {exec.roleName || 'Sales Executive'} ({exec.activeLeadsCount} active lead{exec.activeLeadsCount === 1 ? '' : 's'})
                   </option>
                 ))}
               </select>

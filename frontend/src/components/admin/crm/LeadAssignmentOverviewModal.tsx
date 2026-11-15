@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../../../services/api';
+import { useAuth } from '../../../context/AuthContext';
 import {
   X,
   Users,
@@ -12,7 +14,11 @@ import {
   History,
   Shield,
   Layers,
-  Inbox
+  Inbox,
+  ListChecks,
+  Lock,
+  ExternalLink,
+  ArrowRightLeft
 } from 'lucide-react';
 import LeadAssignmentModal from './LeadAssignmentModal';
 
@@ -44,8 +50,35 @@ interface UnassignedLead {
   };
 }
 
+interface LeadAssignmentItem {
+  id: string;
+  title: string;
+  source: string;
+  status: string;
+  assignmentType: string;
+  assignmentStatus: 'AUTOMATIC' | 'MANUAL' | 'UNASSIGNED';
+  assignedToId: string | null;
+  assignedEmployeeName: string;
+  assignedEmployeeRole: 'Sales Manager' | 'Sales Executive' | null;
+  assignedAt?: string | null;
+  createdAt: string;
+  pipelineStage?: {
+    id: string;
+    name: string;
+    color?: string;
+  } | null;
+  assignedTo?: {
+    id: string;
+    employeeId?: string;
+    firstName: string;
+    lastName: string;
+    roleName?: string | null;
+  } | null;
+}
+
 interface AssignmentHistoryItem {
   id: string;
+  salesLeadId?: string;
   assignmentType: string;
   reason?: string;
   createdAt: string;
@@ -83,6 +116,7 @@ interface OverviewData {
   executives: ExecutiveWorkload[];
   unassignedLeads: UnassignedLead[];
   recentHistory: AssignmentHistoryItem[];
+  leads?: LeadAssignmentItem[];
 }
 
 interface LeadAssignmentOverviewModalProps {
@@ -100,11 +134,36 @@ export default function LeadAssignmentOverviewModal({
   canAssignLeads,
   onWorkloadChanged
 }: LeadAssignmentOverviewModalProps) {
+  const navigate = useNavigate();
+  const { user, hasRole, hasPermission } = useAuth();
+  const currentEmployeeId = user?.employee?.id || null;
+
+  const isAllowedToReassign =
+    canAssignLeads &&
+    (hasRole(['Sales Manager', 'CEO / Super Admin', 'Admin', 'ADMIN', 'SUPER_ADMIN']) ||
+      hasPermission('sales_crm:manage') ||
+      hasPermission('sales_crm:assign'));
+
   const [data, setData] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [toggling, setToggling] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'team' | 'unassigned' | 'history'>('team');
+  const [activeTab, setActiveTab] = useState<'team' | 'assignments' | 'unassigned' | 'history'>('team');
   const [assigningLead, setAssigningLead] = useState<any | null>(null);
+
+  const canOpenLeadDetails = (assignedToId?: string | null) => {
+    if (canManageSettings) return true; // CEO / Super Admin / Admin can open all leads
+    if (!currentEmployeeId || !assignedToId) return false;
+    return assignedToId === currentEmployeeId;
+  };
+
+  const handleLeadClick = (lead: LeadAssignmentItem) => {
+    if (!canOpenLeadDetails(lead.assignedToId)) {
+      // Strictly read-only for other employees' leads
+      return;
+    }
+    onClose();
+    navigate(`/admin/crm/leads/${lead.id}`);
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -247,10 +306,10 @@ export default function LeadAssignmentOverviewModal({
         </div>
 
         {/* Navigation Tabs */}
-        <div className="px-6 pt-3 border-b border-slate-100 flex items-center gap-6 bg-slate-50/40 text-xs font-bold">
+        <div className="px-6 pt-3 border-b border-slate-100 flex items-center gap-6 bg-slate-50/40 text-xs font-bold overflow-x-auto">
           <button
             onClick={() => setActiveTab('team')}
-            className={`pb-3 border-b-2 flex items-center gap-2 transition-colors ${
+            className={`pb-3 border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap ${
               activeTab === 'team'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -260,8 +319,19 @@ export default function LeadAssignmentOverviewModal({
             Executive Workloads ({data?.executives?.length || 0})
           </button>
           <button
+            onClick={() => setActiveTab('assignments')}
+            className={`pb-3 border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap ${
+              activeTab === 'assignments'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <ListChecks className="w-4 h-4" />
+            All Lead Assignments ({data?.leads?.length || 0})
+          </button>
+          <button
             onClick={() => setActiveTab('unassigned')}
-            className={`pb-3 border-b-2 flex items-center gap-2 transition-colors ${
+            className={`pb-3 border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap ${
               activeTab === 'unassigned'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -272,7 +342,7 @@ export default function LeadAssignmentOverviewModal({
           </button>
           <button
             onClick={() => setActiveTab('history')}
-            className={`pb-3 border-b-2 flex items-center gap-2 transition-colors ${
+            className={`pb-3 border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap ${
               activeTab === 'history'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -311,10 +381,21 @@ export default function LeadAssignmentOverviewModal({
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {(() => {
                     const execs = [...data.executives].sort((a, b) => a.id.localeCompare(b.id));
-                    const lastIndex = execs.findIndex(e => e.id === data.lastAssignedLeadExecId);
-                    const nextExecId = execs.length > 0
-                      ? (lastIndex >= 0 && lastIndex < execs.length - 1 ? execs[lastIndex + 1].id : execs[0].id)
-                      : null;
+                    const lastAssignedId = data.lastAssignedLeadExecId;
+                    let nextExecId: string | null = null;
+                    if (execs.length > 0) {
+                      if (!lastAssignedId) {
+                        nextExecId = execs[0].id;
+                      } else {
+                        const lastIndex = execs.findIndex(e => e.id === lastAssignedId);
+                        if (lastIndex >= 0) {
+                          nextExecId = execs[(lastIndex + 1) % execs.length].id;
+                        } else {
+                          const afterIdx = execs.findIndex(e => e.id.localeCompare(lastAssignedId) > 0);
+                          nextExecId = afterIdx >= 0 ? execs[afterIdx].id : execs[0].id;
+                        }
+                      }
+                    }
 
                     return execs.map((exec) => {
                       const isNextInQueue = exec.id === nextExecId;
@@ -336,6 +417,7 @@ export default function LeadAssignmentOverviewModal({
                                 <h4 className="font-bold text-sm text-slate-900 leading-tight">
                                   {exec.firstName} {exec.lastName}
                                 </h4>
+                                <p className="text-[11px] text-blue-600 font-semibold">{exec.roleName}</p>
                                 <p className="text-[11px] text-slate-400 truncate max-w-[140px]">{exec.email}</p>
                               </div>
                             </div>
@@ -373,6 +455,154 @@ export default function LeadAssignmentOverviewModal({
                       );
                     });
                   })()}
+                </div>
+              )}
+            </div>
+          ) : activeTab === 'assignments' ? (
+            <div className="space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-500">
+                <p>Complete overview of all lead assignments across Sales Executives and Sales Managers.</p>
+                {!canManageSettings && (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-full">
+                    <Lock className="w-3 h-3 text-slate-500" />
+                    Other employees' leads are read-only
+                  </span>
+                )}
+              </div>
+
+              {(!data?.leads || data.leads.length === 0) ? (
+                <div className="p-12 text-center rounded-2xl border border-dashed border-slate-200 text-slate-400 text-xs">
+                  No leads found in the system.
+                </div>
+              ) : (
+                <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
+                        <tr>
+                          <th className="py-3 px-4">Lead ID</th>
+                          <th className="py-3 px-4">Lead Name</th>
+                          <th className="py-3 px-4">Assigned Employee</th>
+                          <th className="py-3 px-4">Owner Role</th>
+                          <th className="py-3 px-4">Assignment Status</th>
+                          <th className="py-3 px-4 text-right">Actions & Access</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {data.leads.map((lead) => {
+                          const isOwnOrAdmin = canOpenLeadDetails(lead.assignedToId);
+                          return (
+                            <tr
+                              key={lead.id}
+                              onClick={() => {
+                                if (isOwnOrAdmin) {
+                                  handleLeadClick(lead);
+                                }
+                              }}
+                              className={`transition-colors ${
+                                isOwnOrAdmin
+                                  ? 'hover:bg-blue-50/40 cursor-pointer'
+                                  : 'bg-white hover:bg-slate-50/40 cursor-default'
+                              }`}
+                            >
+                              <td className="py-3 px-4 font-mono text-[11px] text-slate-500" title={lead.id}>
+                                {lead.id.slice(0, 8)}...
+                              </td>
+                              <td className="py-3 px-4">
+                                <div className="font-bold text-slate-900">{lead.title}</div>
+                                {lead.pipelineStage?.name && (
+                                  <span className="text-[10px] text-slate-400">
+                                    Stage: {lead.pipelineStage.name}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3 px-4">
+                                {lead.assignedTo ? (
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-[10px] shrink-0">
+                                      {lead.assignedTo.firstName?.[0]}{lead.assignedTo.lastName?.[0]}
+                                    </div>
+                                    <span className="font-semibold text-slate-800">
+                                      {lead.assignedEmployeeName}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-amber-600 font-semibold">Unassigned</span>
+                                )}
+                              </td>
+                              <td className="py-3 px-4">
+                                {lead.assignedEmployeeRole ? (
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                    lead.assignedEmployeeRole === 'Sales Manager'
+                                      ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                      : 'bg-blue-50 text-blue-700 border border-blue-200'
+                                  }`}>
+                                    {lead.assignedEmployeeRole}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400 text-[11px]">—</span>
+                                )}
+                              </td>
+                              <td className="py-3 px-4">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  lead.assignmentStatus === 'AUTOMATIC'
+                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                    : lead.assignmentStatus === 'MANUAL'
+                                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                    : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                }`}>
+                                  {lead.assignmentStatus === 'AUTOMATIC'
+                                    ? 'Auto-Assigned'
+                                    : lead.assignmentStatus === 'MANUAL'
+                                    ? 'Manually Assigned'
+                                    : 'Unassigned'}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <div className="inline-flex items-center justify-end gap-2">
+                                  {isAllowedToReassign && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setAssigningLead(lead);
+                                      }}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-colors"
+                                      title={lead.assignedToId ? 'Reassign Lead' : 'Assign Lead'}
+                                    >
+                                      <ArrowRightLeft className="w-3 h-3" />
+                                      <span>{lead.assignedToId ? 'Reassign' : 'Assign'}</span>
+                                    </button>
+                                  )}
+                                  {isOwnOrAdmin ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleLeadClick(lead);
+                                      }}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors"
+                                    >
+                                      <span>Open Lead</span>
+                                      <ExternalLink className="w-3 h-3" />
+                                    </button>
+                                  ) : (
+                                    <span
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-semibold text-slate-400 bg-slate-100 border border-slate-200 select-none"
+                                      title="Read-only details: Assigned to another employee"
+                                    >
+                                      <Lock className="w-3 h-3" />
+                                      Read-Only
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </div>
@@ -424,10 +654,12 @@ export default function LeadAssignmentOverviewModal({
                 </div>
               ) : (
                 <div className="border border-slate-200 rounded-2xl divide-y divide-slate-100 overflow-hidden text-xs">
-                  {data.recentHistory.map((item) => (
+                  {data.recentHistory.map((item) => {
+                    const historyLeadId = item.salesLead?.id || item.salesLeadId || '';
+                    return (
                     <div key={item.id} className="p-4 hover:bg-slate-50/60 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                             item.assignmentType === 'AUTOMATIC'
                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
@@ -438,6 +670,11 @@ export default function LeadAssignmentOverviewModal({
                           <span className="font-bold text-slate-900">
                             {item.salesLead?.title || 'Lead'}
                           </span>
+                          {historyLeadId && (
+                            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200" title={historyLeadId}>
+                              Lead ID: {historyLeadId.slice(0, 8)}...
+                            </span>
+                          )}
                         </div>
                         <p className="text-slate-600 mt-1">
                           {item.previousAssignee
@@ -448,7 +685,7 @@ export default function LeadAssignmentOverviewModal({
                           </span>
                           {item.assignedBy && (
                             <span className="text-slate-400 text-[11px] ml-1.5">
-                              (by {item.assignedBy.email})
+                              (Assigned by: {item.assignedBy.email})
                             </span>
                           )}
                         </p>
@@ -462,7 +699,8 @@ export default function LeadAssignmentOverviewModal({
                         {new Date(item.createdAt).toLocaleString()}
                       </span>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

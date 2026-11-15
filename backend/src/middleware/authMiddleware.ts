@@ -24,6 +24,7 @@ export const authenticateJWT = async (req: Request, res: Response, next: NextFun
           const dbUser = await prisma.user.findUnique({
             where: { id: payload.userId },
             include: {
+              employee: { select: { status: true } },
               role: {
                 include: {
                   permissions: true
@@ -32,7 +33,7 @@ export const authenticateJWT = async (req: Request, res: Response, next: NextFun
             }
           });
 
-          if (!dbUser || !dbUser.isActive) {
+          if (!dbUser || !dbUser.isActive || dbUser.employee?.status === 'DELETED') {
             res.status(401).json({ error: 'Unauthorized: User account is inactive or not found' });
             return;
           }

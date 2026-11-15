@@ -138,7 +138,7 @@ export default function EnquiryAssignmentModal({
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-              Select Sales Executive
+              Select Sales Representative
             </label>
             {fetchingTeam ? (
               <div className="text-xs text-slate-400 py-3 text-center">Loading team workload...</div>
@@ -149,16 +149,16 @@ export default function EnquiryAssignmentModal({
                 required
                 className="w-full text-xs font-semibold px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
               >
-                <option value="">-- Choose Sales Executive --</option>
+                <option value="">-- Choose Sales Representative --</option>
                 {executives.map((exec) => (
                   <option key={exec.id} value={exec.id}>
-                    {exec.firstName} {exec.lastName} ({exec.activeLeadsCount} active leads)
+                    {exec.firstName} {exec.lastName} — {exec.roleName || 'Sales Executive'} ({exec.activeLeadsCount} active leads)
                   </option>
                 ))}
               </select>
             )}
             <p className="text-[11px] text-slate-400 mt-1">
-              Workload shows currently active leads assigned to each executive.
+              Workload shows currently active leads assigned to each team member.
             </p>
           </div>
 

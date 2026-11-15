@@ -24,6 +24,13 @@ const LeadKanbanBoard = () => {
     hasPermission('sales_crm:manage') ||
     hasPermission('sales_crm:assign');
 
+  const canManageLeadCard = (lead: any) => {
+    if (canManageSettings) return true;
+    const currentEmployeeId = user?.employee?.id;
+    if (!currentEmployeeId || !lead?.assignedToId) return false;
+    return lead.assignedToId === currentEmployeeId;
+  };
+
   useEffect(() => {
     fetchPipeline();
   }, []);
@@ -120,16 +127,26 @@ const LeadKanbanBoard = () => {
               </div>
 
               <div className="flex-1 flex flex-col gap-3 overflow-y-auto">
-                {stage.leads?.map((lead: any) => (
+                {stage.leads?.map((lead: any) => {
+                  const isOwnOrAdmin = canManageLeadCard(lead);
+                  return (
                   <div
                     key={lead.id}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, lead.id)}
-                    onClick={() => navigate(`/admin/crm/leads/${lead.id}`)}
-                    className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm cursor-pointer hover:border-blue-300 hover:shadow-md transition-all relative group"
+                    draggable={isOwnOrAdmin}
+                    onDragStart={(e) => {
+                      if (isOwnOrAdmin) handleDragStart(e, lead.id);
+                    }}
+                    onClick={() => {
+                      if (isOwnOrAdmin) navigate(`/admin/crm/leads/${lead.id}`);
+                    }}
+                    className={`bg-white p-4 rounded-lg border border-gray-200 shadow-sm transition-all relative group ${
+                      isOwnOrAdmin
+                        ? 'cursor-pointer hover:border-blue-300 hover:shadow-md'
+                        : 'cursor-default opacity-80'
+                    }`}
                   >
                     <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {canAssignLeads && (
+                      {canAssignLeads && isOwnOrAdmin && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -141,24 +158,28 @@ const LeadKanbanBoard = () => {
                           <ArrowRightLeft className="w-4 h-4" />
                         </button>
                       )}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingLead(lead);
-                          setIsEditModalOpen(true);
-                        }}
-                        className="text-gray-400 hover:text-blue-600"
-                        title="Edit Lead"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={(e) => handleDeleteLead(e, lead.id)}
-                        className="text-gray-400 hover:text-red-600"
-                        title="Delete Lead"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {isOwnOrAdmin && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingLead(lead);
+                            setIsEditModalOpen(true);
+                          }}
+                          className="text-gray-400 hover:text-blue-600"
+                          title="Edit Lead"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                      )}
+                      {isOwnOrAdmin && (
+                        <button
+                          onClick={(e) => handleDeleteLead(e, lead.id)}
+                          className="text-gray-400 hover:text-red-600"
+                          title="Delete Lead"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                     <h4 className="font-medium text-gray-900 mb-1 pr-16">{lead.title}</h4>
                     <p className="text-sm text-gray-500 mb-2">{lead.customer?.firstName} {lead.customer?.lastName}</p>
@@ -200,7 +221,8 @@ const LeadKanbanBoard = () => {
                       )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ))}

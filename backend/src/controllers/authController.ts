@@ -45,7 +45,7 @@ export const login = async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    if (!user.isActive) {
+    if (!user.isActive || user.employee?.status === 'DELETED') {
       await logLoginActivity({ userId: user.id, email: normalizedEmail, status: 'FAILED_DEACTIVATED', req });
       await logAudit({ req, userId: user.id, userEmail: normalizedEmail, action: 'FAILED_LOGIN', module: 'Auth', status: 'FORBIDDEN', details: 'Account is deactivated' });
       return res.status(403).json({ error: 'Account is deactivated. Please contact your administrator.' });

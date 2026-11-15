@@ -152,9 +152,46 @@ export const createUser = async (req: Request, res: Response) => {
     const { email, password, roleId, firstName, lastName } = createUserSchema.parse(req.body);
     const normalizedEmail = email.trim().toLowerCase();
 
-    const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
-    if (existingUser) {
-      return res.status(400).json({ error: 'User with this email already exists' });
+    const existingUsers = await prisma.user.findMany({
+      where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
+      include: { employee: true }
+    });
+
+    for (const u of existingUsers) {
+      const emp = u.employee;
+      const emailPrefix = u.email.split('@')[0].trim().split('.')[0]?.toLowerCase() || '';
+      const isPlaceholder = emp
+        ? emp.lastName === 'Member' && /^EMP\d{4,}$/.test(emp.employeeId) && emp.firstName.trim().toLowerCase() === emailPrefix
+        : false;
+      const isReusable = !emp || emp.status === 'DELETED' || isPlaceholder;
+
+      if (isReusable) {
+        const timestamp = Date.now();
+        await prisma.$transaction(async (tx) => {
+          if (emp && (emp.status !== 'DELETED' || !emp.employeeId.startsWith('deleted_'))) {
+            await tx.employee.update({
+              where: { id: emp.id },
+              data: {
+                status: 'DELETED',
+                employeeId: emp.employeeId.startsWith('deleted_')
+                  ? emp.employeeId
+                  : `deleted_${timestamp}_${emp.employeeId}`
+              }
+            });
+          }
+          await tx.user.update({
+            where: { id: u.id },
+            data: {
+              email: u.email.startsWith('deleted_')
+                ? u.email
+                : `deleted_${timestamp}_${u.email}`,
+              isActive: false
+            }
+          });
+        });
+      } else {
+        return res.status(400).json({ error: 'User with this email already exists' });
+      }
     }
 
     const validation = await validatePasswordStrength(password);

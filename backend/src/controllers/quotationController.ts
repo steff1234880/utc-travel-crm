@@ -4,6 +4,7 @@ import { z } from 'zod';
 import crypto from 'crypto';
 import puppeteer from 'puppeteer';
 import path from 'path';
+import { getLeadAccessContext, verifyLeadOwnership } from './leadController';
 
 const createQuotationSchema = z.object({
   salesLeadId: z.string().uuid(),
@@ -40,6 +41,11 @@ const createQuotationSchema = z.object({
 export const createQuotation = async (req: Request, res: Response) => {
   try {
     const data = createQuotationSchema.parse(req.body);
+
+    const ownership = await verifyLeadOwnership(data.salesLeadId, req);
+    if (!ownership.allowed) {
+      return res.status(ownership.statusCode).json({ success: false, error: ownership.error });
+    }
     
     const itemsTotal = data.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
     const baseTotal = data.basePrice + itemsTotal + data.additionalCharges - data.discounts;
@@ -124,7 +130,16 @@ export const createQuotation = async (req: Request, res: Response) => {
 
 export const getQuotations = async (req: Request, res: Response) => {
   try {
+    const access = await getLeadAccessContext(req);
+    const where: any = {};
+    if (access.isOwnLeadsOnlyRole) {
+      where.salesLead = {
+        assignedToId: access.employeeId || '__NO_ASSIGNED_LEADS__'
+      };
+    }
+
     const quotations = await prisma.quotation.findMany({
+      where,
       include: {
         customer: true,
         salesLead: true,
@@ -145,6 +160,13 @@ export const updateQuotationStatus = async (req: Request, res: Response) => {
 
     const oldQuote = await prisma.quotation.findUnique({ where: { id } });
     if (!oldQuote) return res.status(404).json({ success: false, error: 'Not found' });
+
+    if (oldQuote.salesLeadId) {
+      const ownership = await verifyLeadOwnership(oldQuote.salesLeadId, req);
+      if (!ownership.allowed) {
+        return res.status(ownership.statusCode).json({ success: false, error: ownership.error });
+      }
+    }
 
     const quote = await prisma.$transaction(async (tx) => {
       const updatedQuote = await tx.quotation.update({
@@ -194,6 +216,14 @@ export const getQuotationById = async (req: Request, res: Response) => {
       }
     });
     if (!quote) return res.status(404).json({ success: false, error: 'Not found' });
+
+    if (quote.salesLeadId) {
+      const ownership = await verifyLeadOwnership(quote.salesLeadId, req);
+      if (!ownership.allowed) {
+        return res.status(ownership.statusCode).json({ success: false, error: ownership.error });
+      }
+    }
+
     res.json({ success: true, data: quote });
   } catch (error) {
     res.status(500).json({ success: false, error: 'Failed to fetch quotation' });
@@ -374,6 +404,11 @@ export const generateQuotationPdf = async (req: Request, res: Response) => {
 export const getQuotationsByLeadId = async (req: Request, res: Response) => {
   try {
     const leadId = req.params.leadId as string;
+    const ownership = await verifyLeadOwnership(leadId, req);
+    if (!ownership.allowed) {
+      return res.status(ownership.statusCode).json({ success: false, error: ownership.error });
+    }
+
     const quotes = await prisma.quotation.findMany({
       where: { salesLeadId: leadId },
       include: {
@@ -430,6 +465,13 @@ export const updateQuotation = async (req: Request, res: Response) => {
 
     const existingQuote = await prisma.quotation.findUnique({ where: { id }, include: { items: true } });
     if (!existingQuote) return res.status(404).json({ success: false, error: 'Not found' });
+
+    if (existingQuote.salesLeadId) {
+      const ownership = await verifyLeadOwnership(existingQuote.salesLeadId, req);
+      if (!ownership.allowed) {
+        return res.status(ownership.statusCode).json({ success: false, error: ownership.error });
+      }
+    }
 
     // Use transaction to update quote and items
     const updatedQuote = await prisma.$transaction(async (tx) => {
@@ -496,6 +538,16 @@ export const updateQuotation = async (req: Request, res: Response) => {
 export const deleteQuotation = async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
+    const existingQuote = await prisma.quotation.findUnique({ where: { id } });
+    if (!existingQuote) return res.status(404).json({ success: false, error: 'Quotation not found' });
+
+    if (existingQuote.salesLeadId) {
+      const ownership = await verifyLeadOwnership(existingQuote.salesLeadId, req);
+      if (!ownership.allowed) {
+        return res.status(ownership.statusCode).json({ success: false, error: ownership.error });
+      }
+    }
+
     await prisma.quotation.delete({ where: { id } });
     res.json({ success: true, message: 'Quotation deleted successfully' });
   } catch (error) {
@@ -613,6 +665,14 @@ export const convertQuotationToBooking = async (req: Request, res: Response) => 
     });
 
     if (!quotation) return res.status(404).json({ success: false, error: 'Quotation not found' });
+
+    if (quotation.salesLeadId) {
+      const ownership = await verifyLeadOwnership(quotation.salesLeadId, req);
+      if (!ownership.allowed) {
+        return res.status(ownership.statusCode).json({ success: false, error: ownership.error });
+      }
+    }
+
     if (quotation.status !== 'ACCEPTED') return res.status(400).json({ success: false, error: 'Quotation must be ACCEPTED before converting to booking' });
 
     // Check for existing booking

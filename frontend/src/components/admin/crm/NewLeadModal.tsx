@@ -305,7 +305,7 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSuccess 
                 </select>
                 <p className="text-[11px] text-gray-400 mt-1">
                   {formData.assignedToId 
-                    ? 'This lead will be manually assigned to the selected Sales Executive.' 
+                    ? 'This lead will be manually assigned to the selected team member.' 
                     : 'Default: Lead will be automatically assigned in strict sequential round-robin order.'}
                 </p>
               </div>
