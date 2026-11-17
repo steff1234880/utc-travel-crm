@@ -344,31 +344,40 @@ export default function MetaIntegrationTab() {
     mutationFn: async ({ platform, connect }: { platform: string; connect: boolean }) => {
       if (connect) {
         const metadata: any = {};
+        let accountId = '';
         if (platform === 'WHATSAPP') {
-          if (waPhoneNumberId) metadata.phone_number_id = waPhoneNumberId;
-          if (waWabaId) metadata.waba_id = waWabaId;
+          if (!waPhoneNumberId) {
+            throw new Error('WhatsApp Phone Number ID is required.');
+          }
+          metadata.phone_number_id = waPhoneNumberId.trim();
+          if (waWabaId) metadata.waba_id = waWabaId.trim();
+          accountId = waWabaId ? waWabaId.trim() : waPhoneNumberId.trim();
+        } else {
+          accountId = `${platform.toLowerCase()}_utc_${Date.now().toString().slice(-4)}`;
         }
+
         return await api.post('/meta/connect', {
           platform,
-          accountId: platform === 'WHATSAPP' && waWabaId ? waWabaId : `${platform.toLowerCase()}_utc_${Date.now().toString().slice(-4)}`,
+          accountId,
           accountName: platform === 'WHATSAPP' ? 'UTC WhatsApp Cloud API' : `UTC Travel ${platform.charAt(0) + platform.slice(1).toLowerCase()} Account`,
-          accessToken: platform === 'WHATSAPP' && waAccessToken ? waAccessToken : undefined,
+          accessToken: platform === 'WHATSAPP' && waAccessToken ? waAccessToken.trim() : undefined,
           metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
         });
       } else {
         return await api.post('/meta/disconnect', { platform });
       }
     },
-    onSuccess: (_, vars) => {
+    onSuccess: (res: any, vars) => {
+      const msg = res?.data?.message || `${vars.platform} account ${vars.connect ? 'credentials saved' : 'disconnected'} successfully.`;
       setNotification({
         type: 'success',
-        message: `${vars.platform} account ${vars.connect ? 'configured & connected' : 'disconnected'} successfully.`,
+        message: msg,
       });
       if (vars.platform === 'WHATSAPP') setWaAccessToken('');
       queryClient.invalidateQueries({ queryKey: ['meta-config'] });
     },
     onError: (err: any) => {
-      setNotification({ type: 'error', message: err?.response?.data?.message || 'Account action failed.' });
+      setNotification({ type: 'error', message: err?.response?.data?.message || err?.message || 'Account action failed.' });
     }
   });
 

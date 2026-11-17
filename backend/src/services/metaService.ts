@@ -134,13 +134,14 @@ export async function upsertMetaAccount(account: {
   tokenExpiresAt?: Date | null;
   scope?: string;
   metadata?: any;
+  status?: string;
 }): Promise<any> {
   const encryptedToken = account.accessToken ? encryptToken(account.accessToken) : undefined;
   const payload: any = {
     platform: account.platform,
     accountId: account.accountId,
     accountName: account.accountName,
-    status: 'CONNECTED',
+    status: account.status || 'CONNECTED',
     accessToken: encryptedToken,
     tokenExpiresAt: account.tokenExpiresAt || new Date(Date.now() + 60 * 24 * 3600 * 1000),
     scope: account.scope || '',

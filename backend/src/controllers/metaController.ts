@@ -182,7 +182,11 @@ export async function getOAuthUrlController(req: Request, res: Response): Promis
     const state = generateOAuthState(String(redirectUri || ""));
     const appId = config.appId || "DEMO_APP_ID";
     const baseAuthUrl = `https://www.facebook.com/${META_GRAPH_API_VERSION}/dialog/oauth`;
-    const scope = "pages_show_list,pages_read_engagement,leads_retrieval,pages_manage_metadata,instagram_basic,instagram_manage_messages,whatsapp_business_messaging";
+    const scope = platform === 'FACEBOOK'
+      ? "pages_show_list,pages_read_engagement,leads_retrieval,pages_manage_metadata"
+      : platform === 'INSTAGRAM'
+      ? "pages_show_list,instagram_basic,instagram_manage_messages"
+      : "pages_show_list,pages_read_engagement,leads_retrieval,pages_manage_metadata,instagram_basic,instagram_manage_messages,whatsapp_business_messaging";
     const authUrl = `${baseAuthUrl}?client_id=${appId}&redirect_uri=${encodeURIComponent(String(redirectUri || ""))}&state=${state}&scope=${encodeURIComponent(scope)}&response_type=code`;
     res.status(200).json({ success: true, data: { authUrl, state } });
   } catch (error: any) {
@@ -255,9 +259,89 @@ export async function handleOAuthCallbackController(req: Request, res: Response)
         const tokenRes = await fetchJson(tokenExchangeUrl);
         liveAccessToken = tokenRes.access_token;
         tokenExpiresIn = tokenRes.expires_in;
+
+        // If connecting Facebook Page, fetch the client's genuine Page(s) using the user token
+        if (platform === 'FACEBOOK' && liveAccessToken) {
+          try {
+            const pagesUrl = `${GRAPH_API_BASE}/me/accounts?fields=id,name,access_token,category,tasks&access_token=${encodeURIComponent(liveAccessToken)}`;
+            const pagesRes = await fetchJson(pagesUrl);
+            const pages = pagesRes.data || [];
+
+            if (pages.length === 0) {
+              res.status(400).json({
+                success: false,
+                message: 'No Facebook Pages found associated with this Facebook account. Please ensure your account has Admin/Manage access to a Facebook Page.',
+              });
+              return;
+            }
+
+            // Select the primary Facebook Page
+            const primaryPage = pages[0];
+            const pageId = primaryPage.id;
+            const pageName = primaryPage.name;
+            const pageAccessToken = primaryPage.access_token;
+
+            // Automatically subscribe the Facebook Page to leadgen webhook events
+            try {
+              const subUrl = `${GRAPH_API_BASE}/${pageId}/subscribed_apps?subscribed_fields=leadgen,messages&access_token=${encodeURIComponent(pageAccessToken)}`;
+              await fetchJson(subUrl, { method: 'POST' });
+            } catch (subErr) {
+              console.warn('Facebook Page subscribed_apps notification:', subErr);
+            }
+
+            const saved = await upsertMetaAccount({
+              platform: 'FACEBOOK',
+              accountId: pageId,
+              accountName: pageName,
+              accessToken: pageAccessToken,
+              tokenExpiresAt: tokenExpiresIn ? new Date(Date.now() + tokenExpiresIn * 1000) : null,
+              scope: 'pages_show_list,pages_read_engagement,leads_retrieval,pages_manage_metadata',
+              metadata: {
+                page_id: pageId,
+                page_name: pageName,
+                all_pages: pages.map((p: any) => ({ id: p.id, name: p.name })),
+                connected_at: new Date().toISOString(),
+                onboarding_method: 'OAUTH_DIALOG',
+              }
+            });
+
+            res.status(200).json({
+              success: true,
+              message: `Facebook Page "${pageName}" connected and subscribed to Lead Ads successfully!`,
+              data: {
+                platform: saved.platform,
+                accountId: saved.accountId,
+                accountName: saved.accountName,
+              }
+            });
+            return;
+          } catch (pageErr: any) {
+            console.error('Failed to fetch Facebook pages from Graph API:', pageErr?.response?.data || pageErr.message);
+            res.status(400).json({
+              success: false,
+              message: pageErr?.response?.data?.error?.message || 'Failed to retrieve Facebook Pages from Meta Graph API.',
+            });
+            return;
+          }
+        }
       } catch (err: any) {
         console.warn('OAuth code exchange warning with Meta Graph API:', err?.response?.data || err.message);
+        if (config.isLive) {
+          res.status(400).json({
+            success: false,
+            message: err?.response?.data?.error?.message || 'Meta OAuth code exchange failed.',
+          });
+          return;
+        }
       }
+    }
+
+    if (config.isLive && !liveAccessToken) {
+      res.status(400).json({
+        success: false,
+        message: 'Live mode active: Meta authorization code could not be exchanged for a verified access token. Check App ID and App Secret.',
+      });
+      return;
     }
 
     const tokenToStore = liveAccessToken || `EAA_${String(platform).toUpperCase()}_AUTHORIZED_${Date.now()}`;
@@ -298,13 +382,14 @@ export async function testWhatsAppConnectionController(req: Request, res: Respon
 
     const result = await testWhatsAppConnection(phoneNumberId, accessToken || '');
     if (result.success) {
-      // Record successful sync
+      // Record successful sync and mark status CONNECTED
       if (waAccount) {
         await upsertMetaAccount({
           platform: 'WHATSAPP',
           accountId: waAccount.accountId,
-          accountName: waAccount.accountName,
+          accountName: result.verifiedName || waAccount.accountName,
           accessToken: waAccount.accessToken ? decryptToken(waAccount.accessToken) : undefined,
+          status: 'CONNECTED',
           metadata: {
             ...((waAccount.metadata as any) || {}),
             quality_rating: result.qualityRating,
@@ -348,13 +433,65 @@ export async function connectAccountController(req: Request, res: Response): Pro
       return;
     }
 
+    const config = await getMetaConfig();
+    const isLive = config.isLive;
+
+    // For WhatsApp, if credentials are provided manually without prior test,
+    // verify connectivity with Meta Graph API if in live mode or if an access token is provided
+    let accountStatus = 'CONFIGURED';
+    let verifiedAccountName = accountName;
+
+    if (platform.toUpperCase() === 'WHATSAPP') {
+      const phoneNumberId = metadata?.phone_number_id || accountId;
+      if (accessToken && !accessToken.startsWith('EAA_DEMO_')) {
+        const testRes = await testWhatsAppConnection(phoneNumberId, accessToken);
+        if (testRes.success) {
+          accountStatus = 'CONNECTED';
+          if (testRes.verifiedName) verifiedAccountName = testRes.verifiedName;
+          metadata.quality_rating = testRes.qualityRating;
+          metadata.verified_name = testRes.verifiedName;
+          metadata.display_phone_number = testRes.phoneNumber;
+          metadata.code_verification_status = testRes.codeVerificationStatus;
+        } else if (isLive) {
+          res.status(400).json({
+            success: false,
+            message: `WhatsApp API verification failed: ${testRes.error || 'Invalid credentials or phone number ID'}. Credentials not saved.`,
+          });
+          return;
+        } else {
+          accountStatus = 'DISCONNECTED';
+        }
+      } else if (isLive) {
+        // If live and no token provided, check if existing account has one
+        const existing = await prisma.metaAccount.findFirst({
+          where: { platform: 'WHATSAPP', accountId }
+        });
+        if (!existing?.accessToken) {
+          res.status(400).json({
+            success: false,
+            message: 'Live mode active: A genuine System User access token is required to connect WhatsApp.',
+          });
+          return;
+        }
+      }
+    } else if (config.isLive && (!accessToken || accessToken.startsWith('EAA_DEMO_'))) {
+      res.status(400).json({
+        success: false,
+        message: 'Live mode active: Real Meta OAuth authorization or genuine System User access token is required. Mock demo connections are rejected.',
+      });
+      return;
+    } else {
+      accountStatus = 'CONNECTED';
+    }
+
     const saved = await upsertMetaAccount({
       platform: platform.toUpperCase(),
       accountId,
-      accountName: accountName || `${platform} Business Account`,
-      accessToken: accessToken || `EAA_DEMO_${platform}_TOKEN`,
+      accountName: verifiedAccountName || `${platform} Business Account`,
+      accessToken: accessToken || (isLive ? undefined : `EAA_DEMO_${platform}_TOKEN`),
       scope,
       metadata,
+      status: accountStatus,
     });
 
     res.status(200).json({
@@ -505,19 +642,22 @@ export async function handleWebhookEventController(req: Request, res: Response):
           const mid = messaging.message?.mid;
           const senderId = messaging.sender?.id;
           const recipientId = messaging.recipient?.id;
-          const text = messaging.message?.text;
+          const text = messaging.message?.text || (messaging.message?.attachments ? '[Instagram Media/Attachment]' : '');
+          const senderUsername = messaging.sender?.username || undefined;
 
-          if (mid && text) {
+          if (mid && (text || messaging.message?.attachments)) {
             const isNew = await checkAndRecordProcessedEvent(mid, 'MESSAGE', `IG DM ${mid}`);
             if (isNew) {
               await recordMetaMessage({
                 platform: 'INSTAGRAM',
                 externalId: mid,
                 senderId,
+                senderName: senderUsername,
                 recipientId,
                 direction: 'INBOUND',
-                content: text,
+                content: text || '[Instagram Media]',
                 status: 'READ',
+                rawPayload: messaging,
               });
             }
           }
@@ -740,37 +880,74 @@ async function recordMetaMessage(data: {
   rawPayload?: any;
 }) {
   try {
-    const normalizedPhone = data.senderId.replace(/\D/g, '');
-    const phoneFormatted = data.senderId.startsWith('+') ? data.senderId : `+${data.senderId}`;
+    let customer: any = null;
 
-    // 1. Find or create Customer
-    let customer = await prisma.customer.findFirst({
-      where: {
-        OR: [
-          { whatsappNumber: { contains: normalizedPhone.slice(-10) } },
-          { phone: { contains: normalizedPhone.slice(-10) } }
-        ]
-      }
-    });
+    if (data.platform === 'WHATSAPP') {
+      const normalizedPhone = data.senderId.replace(/\D/g, '');
+      const phoneFormatted = data.senderId.startsWith('+') ? data.senderId : `+${data.senderId}`;
 
-    if (!customer && data.direction === 'INBOUND') {
-      const nameParts = (data.senderName || 'WhatsApp Traveller').trim().split(' ');
-      const firstName = nameParts[0] || 'WhatsApp';
-      const lastName = nameParts.slice(1).join(' ') || 'Traveller';
-      customer = await prisma.customer.create({
-        data: {
-          firstName,
-          lastName,
-          email: `${normalizedPhone}@whatsapp.utctravel.com`,
-          phone: phoneFormatted,
-          whatsappNumber: phoneFormatted,
+      // 1. Find or create Customer by phone
+      customer = await prisma.customer.findFirst({
+        where: {
+          OR: [
+            { whatsappNumber: { contains: normalizedPhone.slice(-10) } },
+            { phone: { contains: normalizedPhone.slice(-10) } }
+          ]
         }
       });
+
+      if (!customer && data.direction === 'INBOUND') {
+        const nameParts = (data.senderName || 'WhatsApp Traveller').trim().split(' ');
+        const firstName = nameParts[0] || 'WhatsApp';
+        const lastName = nameParts.slice(1).join(' ') || 'Traveller';
+        customer = await prisma.customer.create({
+          data: {
+            firstName,
+            lastName,
+            email: `${normalizedPhone}@whatsapp.utctravel.com`,
+            phone: phoneFormatted,
+            whatsappNumber: phoneFormatted,
+          }
+        });
+      }
+    } else if (data.platform === 'INSTAGRAM') {
+      const igsid = data.senderId;
+      // 1. Find existing customer by previous MetaMessage with this Instagram senderId
+      const prevMessage = await prisma.metaMessage.findFirst({
+        where: {
+          platform: 'INSTAGRAM',
+          senderId: igsid,
+          customerId: { not: null },
+        },
+        include: { customer: true }
+      });
+
+      if (prevMessage?.customer) {
+        customer = prevMessage.customer;
+      } else {
+        // Fallback: check if customer was created with IG identifier email
+        const igEmail = `ig_${igsid}@instagram.utctravel.com`;
+        customer = await prisma.customer.findUnique({
+          where: { email: igEmail }
+        });
+      }
+
+      if (!customer && data.direction === 'INBOUND') {
+        const igUsername = data.senderName || `instagram_user_${igsid.slice(-6)}`;
+        customer = await prisma.customer.create({
+          data: {
+            firstName: igUsername,
+            lastName: '(Instagram)',
+            email: `ig_${igsid}@instagram.utctravel.com`,
+            // Do NOT fabricate phone or whatsappNumber
+          }
+        });
+      }
     }
 
     let enquiryId: string | undefined = undefined;
 
-    // 2. Find active enquiry or create a new enquiry from inbound WhatsApp message
+    // 2. Find active enquiry or create a new enquiry from inbound message
     if (customer) {
       const activeEnquiry = await prisma.enquiry.findFirst({
         where: {
@@ -782,9 +959,11 @@ async function recordMetaMessage(data: {
 
       if (activeEnquiry) {
         enquiryId = activeEnquiry.id;
-      } else if (data.direction === 'INBOUND' && data.platform === 'WHATSAPP') {
-        // Create new WhatsApp Enquiry
-        function generateWaRef() {
+      } else if (data.direction === 'INBOUND' && (data.platform === 'WHATSAPP' || data.platform === 'INSTAGRAM')) {
+        const isInstagram = data.platform === 'INSTAGRAM';
+        const sourceName = isInstagram ? 'Instagram DM' : 'WhatsApp Enquiry';
+
+        function generateUniqueRef() {
           const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
           let res = 'ENQ-';
           for (let i = 0; i < 6; i++) {
@@ -793,20 +972,20 @@ async function recordMetaMessage(data: {
           return res;
         }
 
-        let referenceNumber = generateWaRef();
+        let referenceNumber = generateUniqueRef();
         while (await prisma.enquiry.findUnique({ where: { referenceNumber } })) {
-          referenceNumber = generateWaRef();
+          referenceNumber = generateUniqueRef();
         }
 
         const newEnquiry = await prisma.enquiry.create({
           data: {
             referenceNumber,
-            source: 'WhatsApp Enquiry',
+            source: sourceName,
             status: 'NEW',
             customerId: customer.id,
-            destination: 'General Enquiry',
-            message: data.content || 'Incoming message via WhatsApp',
-            preferredContact: 'WHATSAPP',
+            destination: isInstagram ? 'Instagram Inquiry' : 'General Enquiry',
+            message: data.content || (isInstagram ? 'Incoming message via Instagram Direct' : 'Incoming message via WhatsApp'),
+            preferredContact: isInstagram ? 'OTHER' : 'WHATSAPP',
           }
         });
         enquiryId = newEnquiry.id;
@@ -818,8 +997,8 @@ async function recordMetaMessage(data: {
 
         const salesLead = await prisma.salesLead.create({
           data: {
-            title: `WhatsApp Enquiry (${newEnquiry.referenceNumber})`,
-            source: 'WhatsApp Enquiry',
+            title: `${sourceName} (${newEnquiry.referenceNumber})`,
+            source: sourceName,
             status: 'NEW',
             customerId: customer.id,
             pipelineStageId: pipelineStage?.id || null,
@@ -828,7 +1007,7 @@ async function recordMetaMessage(data: {
         });
 
         const assignResult = await assignLeadAutomatically(salesLead.id).catch((err) => {
-          console.error('Error auto-assigning WhatsApp enquiry lead:', err);
+          console.error(`Error auto-assigning ${sourceName} lead:`, err);
           return null;
         });
 
