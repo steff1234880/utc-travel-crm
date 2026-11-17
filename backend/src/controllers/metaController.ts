@@ -179,17 +179,28 @@ export function validateOAuthState(state: string): boolean {
 
 export async function getOAuthUrlController(req: Request, res: Response): Promise<void> {
   try {
-    const { platform = "FACEBOOK", redirectUri } = req.query;
+    const { platform = "FACEBOOK", redirectUri, configId } = req.query;
     const config = await getMetaConfig();
     const state = generateOAuthState(String(redirectUri || ""));
     const appId = config.appId || "DEMO_APP_ID";
     const baseAuthUrl = `https://www.facebook.com/${META_GRAPH_API_VERSION}/dialog/oauth`;
-    const scope = platform === 'FACEBOOK'
-      ? "pages_show_list,pages_read_engagement,leads_retrieval,pages_manage_metadata"
-      : platform === 'INSTAGRAM'
-      ? "pages_show_list,instagram_basic,instagram_manage_messages"
-      : "pages_show_list,pages_read_engagement,leads_retrieval,pages_manage_metadata,instagram_basic,instagram_manage_messages,whatsapp_business_messaging";
-    const authUrl = `${baseAuthUrl}?client_id=${appId}&redirect_uri=${encodeURIComponent(String(redirectUri || ""))}&state=${state}&scope=${encodeURIComponent(scope)}&response_type=code`;
+    
+    let scope = "pages_show_list,pages_read_engagement,leads_retrieval,pages_manage_metadata";
+    if (platform === 'INSTAGRAM') {
+      scope = "pages_show_list,instagram_basic,instagram_manage_messages";
+    } else if (platform === 'WHATSAPP') {
+      scope = "whatsapp_business_management,whatsapp_business_messaging";
+    }
+
+    let authUrl = `${baseAuthUrl}?client_id=${encodeURIComponent(appId)}&redirect_uri=${encodeURIComponent(String(redirectUri || ""))}&state=${encodeURIComponent(state)}&response_type=code`;
+    
+    // If a valid numeric configId is supplied for Facebook Login for Business / Embedded Signup
+    if (configId && /^\d+$/.test(String(configId).trim())) {
+      authUrl += `&config_id=${encodeURIComponent(String(configId).trim())}&override_default_response_type=true`;
+    } else {
+      authUrl += `&scope=${encodeURIComponent(scope)}`;
+    }
+
     res.status(200).json({ success: true, data: { authUrl, state } });
   } catch (error: any) {
     res.status(500).json({ success: false, message: "Failed to generate OAuth URL" });

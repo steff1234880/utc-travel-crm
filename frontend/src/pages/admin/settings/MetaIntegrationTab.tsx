@@ -80,7 +80,7 @@ export default function MetaIntegrationTab() {
   const [waWabaId, setWaWabaId] = useState('');
   const [waBusinessEmail, setWaBusinessEmail] = useState('');
   const [waAccessToken, setWaAccessToken] = useState('');
-  const [waConfigId, setWaConfigId] = useState('whatsapp_embedded_signup');
+  const [waConfigId, setWaConfigId] = useState('');
   const [waTestStatus, setWaTestStatus] = useState<any | null>(null);
 
   // Quick Action / Testing states
@@ -192,99 +192,161 @@ export default function MetaIntegrationTab() {
     }
   };
 
-  // Meta JavaScript SDK / Embedded Signup Launcher
-  const launchEmbeddedSignup = () => {
+  // Meta JavaScript SDK / Embedded Signup & OAuth Launcher
+  const launchEmbeddedSignup = async () => {
     if (!appId) {
-      setNotification({ type: 'error', message: 'Meta App ID is required before launching Embedded Signup. Please save your Meta App ID in the settings above.' });
+      setNotification({ type: 'error', message: 'Meta App ID is required before launching WhatsApp connection. Please save your Meta App ID in the settings above.' });
       return;
     }
 
     setIsEmbeddedSigningUp(true);
 
-    // Ensure Meta FB SDK script is present
-    const initAndLogin = () => {
-      const fb = (window as any).FB;
-      if (!fb) {
-        setNotification({ type: 'error', message: 'Meta JavaScript SDK failed to load. Please check your browser connection or content blocker.' });
-        setIsEmbeddedSigningUp(false);
-        return;
-      }
+    const isNumericConfigId = waConfigId && /^\d+$/.test(waConfigId.trim());
 
-      try {
-        fb.init({
-          appId: appId,
-          autoLogAppEvents: true,
-          xfbml: true,
-          version: 'v21.0',
-        });
+    // Primary Flow: If a valid numeric Configuration ID is configured, use official FB.login Embedded Signup
+    if (isNumericConfigId) {
+      const initAndLogin = () => {
+        const fb = (window as any).FB;
+        if (!fb) {
+          // Fallback to direct OAuth popup if SDK blocked
+          launchDirectWhatsAppOAuth();
+          return;
+        }
 
-        fb.login(
-          (response: any) => {
-            if (response?.authResponse?.code) {
-              // Send authorization code to backend for token exchange and WABA discovery
-              api.post('/meta/oauth/callback', {
-                code: response.authResponse.code,
-                platform: 'WHATSAPP',
-                state: 'state_' + Date.now(),
-              })
-              .then((res: any) => {
-                setNotification({
-                  type: 'success',
-                  message: `WhatsApp Embedded Signup successful! Connected Phone: ${res.data?.data?.phoneNumber || 'Ready'}`
-                });
-                queryClient.invalidateQueries({ queryKey: ['meta-config'] });
-              })
-              .catch((err: any) => {
-                setNotification({
-                  type: 'error',
-                  message: err.response?.data?.message || 'Embedded Signup exchange failed. Please ensure the Meta App ID and Secret are configured.'
-                });
-              })
-              .finally(() => setIsEmbeddedSigningUp(false));
-            } else {
-              setIsEmbeddedSigningUp(false);
-              if (response?.status !== 'connected') {
-                setNotification({ type: 'info', message: 'WhatsApp Embedded Signup was closed or cancelled.' });
+        try {
+          fb.init({
+            appId: appId.trim(),
+            autoLogAppEvents: true,
+            xfbml: true,
+            version: 'v21.0',
+          });
+
+          // Listen for WA_EMBEDDED_SIGNUP window postMessage events
+          const messageHandler = (event: MessageEvent) => {
+            if (event.origin !== 'https://www.facebook.com' && event.origin !== 'https://web.facebook.com') return;
+            try {
+              const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+              if (data?.type === 'WA_EMBEDDED_SIGNUP' && data?.event === 'FINISH') {
+                if (data.data?.phone_number_id) setWaPhoneNumberId(data.data.phone_number_id);
+                if (data.data?.waba_id) setWaWabaId(data.data.waba_id);
+              }
+            } catch (e) {
+              // Ignore non-json messages
+            }
+          };
+          window.addEventListener('message', messageHandler, { once: true });
+
+          fb.login(
+            (response: any) => {
+              if (response?.authResponse?.code) {
+                // Send authorization code to backend for token exchange and WABA discovery
+                api.post('/meta/oauth/callback', {
+                  code: response.authResponse.code,
+                  platform: 'WHATSAPP',
+                  state: 'state_' + Date.now(),
+                })
+                .then((res: any) => {
+                  setNotification({
+                    type: 'success',
+                    message: `WhatsApp Embedded Signup successful! Connected Phone: ${res.data?.data?.phoneNumber || 'Ready'}`
+                  });
+                  queryClient.invalidateQueries({ queryKey: ['meta-config'] });
+                })
+                .catch((err: any) => {
+                  setNotification({
+                    type: 'error',
+                    message: err.response?.data?.message || 'Embedded Signup exchange failed. Please ensure the Meta App ID and Secret are configured.'
+                  });
+                })
+                .finally(() => setIsEmbeddedSigningUp(false));
+              } else {
+                setIsEmbeddedSigningUp(false);
+                if (response?.status !== 'connected') {
+                  setNotification({ type: 'info', message: 'WhatsApp Embedded Signup was closed or cancelled.' });
+                }
+              }
+            },
+            {
+              config_id: waConfigId.trim(),
+              response_type: 'code',
+              override_default_response_type: true,
+              extras: {
+                setup: {
+                  coexistence: true,
+                }
               }
             }
-          },
-          {
-            config_id: waConfigId || 'whatsapp_embedded_signup',
-            response_type: 'code',
-            override_default_response_type: true,
-            extras: {
-              setup: {
-                coexistence: true,
-              }
-            }
-          }
-        );
-      } catch (sdkInitErr: any) {
-        setIsEmbeddedSigningUp(false);
-        setNotification({ type: 'error', message: sdkInitErr?.message || 'Failed to initialize Meta Facebook SDK' });
-      }
-    };
+          );
+        } catch (sdkInitErr: any) {
+          console.warn('FB.login failed, falling back to direct OAuth:', sdkInitErr);
+          launchDirectWhatsAppOAuth();
+        }
+      };
 
-    if (!(window as any).FB) {
-      const existingScript = document.getElementById('facebook-jssdk');
-      if (existingScript) {
-        existingScript.remove();
+      if (!(window as any).FB) {
+        const existingScript = document.getElementById('facebook-jssdk');
+        if (existingScript) existingScript.remove();
+        const script = document.createElement('script');
+        script.id = 'facebook-jssdk';
+        script.src = 'https://connect.facebook.net/en_US/sdk.js';
+        script.async = true;
+        script.defer = true;
+        script.onload = () => setTimeout(initAndLogin, 50);
+        script.onerror = () => {
+          console.warn('Failed to load SDK script, using direct OAuth dialog');
+          launchDirectWhatsAppOAuth();
+        };
+        document.body.appendChild(script);
+      } else {
+        initAndLogin();
       }
-      const script = document.createElement('script');
-      script.id = 'facebook-jssdk';
-      script.src = 'https://connect.facebook.net/en_US/sdk.js';
-      script.async = true;
-      script.defer = true;
-      script.onload = () => {
-        setTimeout(initAndLogin, 50);
-      };
-      script.onerror = () => {
-        setNotification({ type: 'error', message: 'Failed to load Meta JavaScript SDK script. Please disable ad-blockers and try again.' });
-        setIsEmbeddedSigningUp(false);
-      };
-      document.body.appendChild(script);
     } else {
-      initAndLogin();
+      // Fallback Flow: When no numeric Configuration ID is configured, use direct OAuth dialog with WhatsApp scopes
+      launchDirectWhatsAppOAuth();
+    }
+  };
+
+  // Direct OAuth flow for WhatsApp (bypasses missing/invalid Configuration ID crashes)
+  const launchDirectWhatsAppOAuth = async () => {
+    try {
+      const redirectUri = typeof window !== 'undefined' ? `${window.location.origin}/admin/settings?tab=meta` : '';
+      const configParam = waConfigId && /^\d+$/.test(waConfigId.trim()) ? `&configId=${encodeURIComponent(waConfigId.trim())}` : '';
+      const res = await api.get(`/meta/oauth/url?platform=WHATSAPP&redirectUri=${encodeURIComponent(redirectUri)}${configParam}`);
+      if (res.data.success && res.data.data.authUrl) {
+        const authUrl = res.data.data.authUrl;
+        const width = 600;
+        const height = 700;
+        const left = window.screen.width / 2 - width / 2;
+        const top = window.screen.height / 2 - height / 2;
+        const popup = window.open(
+          authUrl,
+          'MetaOAuthPopup',
+          `toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=yes, resizable=yes, copyhistory=no, width=${width}, height=${height}, top=${top}, left=${left}`
+        );
+
+        if (!popup) {
+          window.location.href = authUrl;
+          return;
+        }
+
+        const pollTimer = window.setInterval(() => {
+          try {
+            if (popup.closed) {
+              window.clearInterval(pollTimer);
+              setIsEmbeddedSigningUp(false);
+              queryClient.invalidateQueries({ queryKey: ['meta-config'] });
+            }
+          } catch (e) {
+            // Cross-origin restriction while browsing Meta
+          }
+        }, 1000);
+      } else {
+        setNotification({ type: 'error', message: res.data.message || 'Failed to generate WhatsApp authorization URL.' });
+        setIsEmbeddedSigningUp(false);
+      }
+    } catch (err: any) {
+      setNotification({ type: 'error', message: err?.response?.data?.message || 'Error initializing WhatsApp OAuth.' });
+      setIsEmbeddedSigningUp(false);
     }
   };
 
@@ -733,9 +795,10 @@ export default function MetaIntegrationTab() {
               type="text"
               value={waConfigId}
               onChange={(e) => setWaConfigId(e.target.value)}
-              placeholder="whatsapp_embedded_signup"
+              placeholder="e.g. 123456789012345 (Numeric)"
               className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
+            <p className="text-[10px] text-slate-400 mt-1">Optional numeric ID from Meta App Dashboard &gt; Configurations</p>
           </div>
 
           <div>
