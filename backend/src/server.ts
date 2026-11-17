@@ -58,7 +58,12 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 }));
 
-app.use(express.json());
+// Retain raw body buffer for secure HMAC-SHA256 webhook signature verification (Meta / WhatsApp / Stripe)
+app.use(express.json({
+  verify: (req: any, _res, buf) => {
+    req.rawBody = buf;
+  }
+}));
 
 // Core Routes
 app.use('/api/auth', authRoutes);

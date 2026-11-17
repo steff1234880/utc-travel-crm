@@ -9,6 +9,8 @@ import {
   verifyWebhookController,
   handleWebhookEventController,
   sendWhatsAppMessageController,
+  testWhatsAppConnectionController,
+  getWhatsAppTemplatesController,
   getConversationsController,
   trackCapiEventController,
   getMetaAnalyticsController,
@@ -43,7 +45,9 @@ router.post('/disconnect', authenticate, requireModuleAccess('System Settings'),
 // 4. WhatsApp & Omni Messaging (Enquiries / Sales CRM)
 // ==========================================
 router.get('/conversations', authenticate, getConversationsController);
+router.get('/whatsapp/templates', authenticate, getWhatsAppTemplatesController);
 router.post('/whatsapp/send', authenticate, sendWhatsAppMessageController);
+router.post('/whatsapp/test-connection', authenticate, requireModuleAccess('System Settings'), testWhatsAppConnectionController);
 
 // ==========================================
 // 5. Meta Analytics & Simulator

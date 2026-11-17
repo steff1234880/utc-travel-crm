@@ -408,6 +408,7 @@ async function verifyEnquiryOwnership(enquiryId: string, req: Request): Promise<
         orderBy: { scheduledFor: 'asc' } 
       },
       statusHistory: { orderBy: { createdAt: 'asc' } },
+      messages: { orderBy: { createdAt: 'asc' } },
     }
   });
 

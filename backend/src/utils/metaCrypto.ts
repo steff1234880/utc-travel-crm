@@ -1,7 +1,13 @@
 import crypto from 'crypto';
 
-// Encryption key derived from JWT_ACCESS_SECRET or fallback
-const ENCRYPTION_SECRET = process.env.META_ENCRYPTION_SECRET || process.env.JWT_ACCESS_SECRET || 'utc-meta-integration-default-salt-32b';
+// Production-grade AES-256-GCM encryption key derivation
+const rawSecret = process.env.META_ENCRYPTION_SECRET || process.env.ENCRYPTION_KEY || process.env.JWT_ACCESS_SECRET;
+
+if (process.env.NODE_ENV === 'production' && !rawSecret) {
+  throw new Error('FATAL: META_ENCRYPTION_SECRET or ENCRYPTION_KEY environment variable is mandatory in production.');
+}
+
+const ENCRYPTION_SECRET = rawSecret || 'utc-meta-integration-dev-secret-salt-32b';
 const ALGORITHM = 'aes-256-gcm';
 
 // Produce exactly 32 bytes key
@@ -50,9 +56,11 @@ export function decryptToken(encryptedString: string): string {
  * Mask access token for safe frontend delivery (never expose raw token)
  */
 export function maskToken(token: string | null | undefined): string {
-  if (!token) return 'Not Configured';
-  if (token.length <= 8) return '********';
-  return `${token.slice(0, 4)}...${token.slice(-4)}`;
+  if (!token) return '';
+  const decrypted = decryptToken(token);
+  if (!decrypted) return '';
+  if (decrypted.length <= 8) return '********';
+  return `${decrypted.slice(0, 4)}...${decrypted.slice(-4)}`;
 }
 
 /**
@@ -66,7 +74,10 @@ export function verifyMetaSignature(payload: string | Buffer, signatureHeader: s
 
     const hmac = crypto.createHmac('sha256', appSecret);
     const expected = hmac.update(payload).digest('hex');
-    return crypto.timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expected, 'hex'));
+    const sigBuf = Buffer.from(signature, 'hex');
+    const expBuf = Buffer.from(expected, 'hex');
+    if (sigBuf.length !== expBuf.length) return false;
+    return crypto.timingSafeEqual(sigBuf, expBuf);
   } catch (err) {
     console.error('Signature verification error:', err);
     return false;

@@ -54,6 +54,19 @@ interface EnquiryDetailData {
   notes: Array<{ id: string; text: string; createdAt: string; authorId: string }>;
   followUps: FollowUpItem[];
   statusHistory: Array<{ id: string; oldStatus?: string; newStatus: string; createdAt: string; remarks?: string }>;
+  messages?: Array<{
+    id: string;
+    platform: string;
+    externalId?: string;
+    senderId: string;
+    senderName?: string;
+    direction: 'INBOUND' | 'OUTBOUND';
+    content: string;
+    status: string;
+    type: string;
+    templateName?: string;
+    createdAt: string;
+  }>;
 }
 
 export default function EnquiryDetail() {
@@ -110,6 +123,23 @@ export default function EnquiryDetail() {
   });
 
   const [newNoteText, setNewNoteText] = useState('');
+  const [waReplyText, setWaReplyText] = useState('');
+  const [isSendingWa, setIsSendingWa] = useState(false);
+  const [sendMode, setSendMode] = useState<'TEXT' | 'TEMPLATE'>('TEXT');
+  const [selectedTemplateName, setSelectedTemplateName] = useState('');
+  const [templateParam1, setTemplateParam1] = useState('');
+  const [templateParam2, setTemplateParam2] = useState('');
+
+  // Fetch approved WhatsApp message templates
+  const { data: templatesData } = useQuery<{ data: any[] }>({
+    queryKey: ['whatsapp-templates'],
+    queryFn: async () => {
+      const res = await api.get('/meta/whatsapp/templates');
+      return res.data;
+    },
+  });
+
+  const templates = templatesData?.data || [];
 
   // Fetch enquiry detail
   const { data: enquiryData, isLoading, isError, refetch } = useQuery<{ data: EnquiryDetailData }>({
@@ -210,6 +240,78 @@ export default function EnquiryDetail() {
       setFeedback({ type: 'error', message: msg });
     }
   });
+
+  // Outbound WhatsApp Reply Dispatch
+  const handleSendWhatsAppReply = async () => {
+    const recipientPhone = enquiry?.customer?.whatsappNumber || enquiry?.customer?.phone;
+    if (!recipientPhone) {
+      setFeedback({ type: 'error', message: 'Customer phone number or WhatsApp number is missing' });
+      return;
+    }
+
+    if (sendMode === 'TEXT' && !waReplyText.trim()) return;
+    if (sendMode === 'TEMPLATE' && !selectedTemplateName) {
+      setFeedback({ type: 'error', message: 'Please select an approved WhatsApp template' });
+      return;
+    }
+
+    setIsSendingWa(true);
+    try {
+      const payload: any = {
+        to: recipientPhone,
+        enquiryId: id,
+        customerId: enquiry?.customer?.id,
+      };
+
+      if (sendMode === 'TEMPLATE') {
+        payload.templateName = selectedTemplateName;
+        payload.languageCode = 'en_US';
+        const params: any[] = [];
+        if (templateParam1) params.push({ type: 'text', text: templateParam1 });
+        if (templateParam2) params.push({ type: 'text', text: templateParam2 });
+        if (params.length > 0) {
+          payload.components = [
+            {
+              type: 'body',
+              parameters: params,
+            }
+          ];
+        }
+      } else {
+        payload.text = waReplyText.trim();
+      }
+
+      const res = await api.post('/meta/whatsapp/send', payload);
+
+      if (res.data.success) {
+        setFeedback({ type: 'success', message: 'WhatsApp message dispatched successfully' });
+        setWaReplyText('');
+        if (sendMode === 'TEMPLATE') {
+          setTemplateParam1('');
+          setTemplateParam2('');
+        }
+        queryClient.invalidateQueries({ queryKey: ['enquiry', id] });
+      } else {
+        setFeedback({ type: 'error', message: res.data.message || 'Failed to send WhatsApp message' });
+      }
+    } catch (err: any) {
+      const errData = err.response?.data;
+      if (errData?.code === 'OUTSIDE_24_HOUR_WINDOW') {
+        setSendMode('TEMPLATE');
+        if (templates.length > 0 && !selectedTemplateName) {
+          setSelectedTemplateName(templates[0].name);
+          setTemplateParam1(enquiry?.customer?.firstName || 'Traveller');
+          setTemplateParam2(enquiry?.package?.title || enquiry?.destination || 'Vacation Tour');
+        }
+      }
+      setFeedback({
+        type: 'error',
+        message: errData?.message || 'Failed to send WhatsApp message'
+      });
+    } finally {
+      setIsSendingWa(false);
+    }
+  };
 
   const closeFollowUpModal = () => {
     setIsFollowUpModalOpen(false);
@@ -405,6 +507,181 @@ export default function EnquiryDetail() {
                     <p className="text-slate-700 text-sm whitespace-pre-wrap">{enquiry.message}</p>
                   </div>
                 ) : null}
+              </div>
+            </div>
+          </div>
+
+          {/* WhatsApp / Omni Channel Conversation History Card */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+            <div className="p-5 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg">
+                  <MessageCircle className="w-4 h-4" />
+                </div>
+                <h3 className="font-bold text-slate-900 text-sm">
+                  WhatsApp Conversation History ({enquiry.messages?.length || 0})
+                </h3>
+              </div>
+              <span className="text-[11px] font-bold text-slate-500">
+                Client: {enquiry.customer?.whatsappNumber || enquiry.customer?.phone || 'No phone recorded'}
+              </span>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* Message Thread List */}
+              <div className="max-h-72 overflow-y-auto space-y-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                {(!enquiry.messages || enquiry.messages.length === 0) ? (
+                  <div className="text-center py-6 text-slate-400 text-xs">
+                    No WhatsApp messages exchanged yet for this enquiry.
+                  </div>
+                ) : (
+                  enquiry.messages.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className={`flex flex-col ${msg.direction === 'OUTBOUND' ? 'items-end' : 'items-start'}`}
+                    >
+                      <div
+                        className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-xs shadow-2xs ${
+                          msg.direction === 'OUTBOUND'
+                            ? 'bg-emerald-600 text-white rounded-tr-none'
+                            : 'bg-white text-slate-800 border border-slate-200/80 rounded-tl-none'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 mb-1 opacity-80 text-[10px]">
+                          <span className="font-bold">{msg.direction === 'OUTBOUND' ? 'Agent / System' : (msg.senderName || 'Customer')}</span>
+                          <span>•</span>
+                          <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                        <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                        <div className="flex items-center justify-end gap-1 mt-1 opacity-70 text-[9px] uppercase font-mono">
+                          <span>{msg.status}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Messaging Controls: Freeform vs WhatsApp Template */}
+              <div className="border-t border-slate-100 pt-3 space-y-3">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-700">Send Mode:</span>
+                    <button
+                      type="button"
+                      onClick={() => setSendMode('TEXT')}
+                      className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-colors ${
+                        sendMode === 'TEXT' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      Freeform Text (Within 24h)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSendMode('TEMPLATE');
+                        if (templates.length > 0 && !selectedTemplateName) {
+                          setSelectedTemplateName(templates[0].name);
+                          setTemplateParam1(enquiry.customer?.firstName || 'Traveller');
+                          setTemplateParam2(enquiry.package?.title || enquiry.destination || 'Vacation Tour');
+                        }
+                      }}
+                      className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-colors ${
+                        sendMode === 'TEMPLATE' ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      Approved Template (Anytime)
+                    </button>
+                  </div>
+                </div>
+
+                {sendMode === 'TEXT' ? (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={waReplyText}
+                      onChange={(e) => setWaReplyText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendWhatsAppReply();
+                        }
+                      }}
+                      placeholder="Type a WhatsApp reply to customer..."
+                      disabled={isSendingWa}
+                      className="flex-1 px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSendWhatsAppReply}
+                      disabled={isSendingWa || !waReplyText.trim()}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-50 flex items-center gap-1.5 shadow-2xs"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      {isSendingWa ? 'Sending...' : 'Send Reply'}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="bg-indigo-50/60 border border-indigo-100 rounded-xl p-3.5 space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                      <div className="sm:col-span-1">
+                        <label className="block text-[10px] font-bold text-slate-600 mb-1">Approved Template</label>
+                        <select
+                          value={selectedTemplateName}
+                          onChange={(e) => setSelectedTemplateName(e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium"
+                        >
+                          {templates.map((tpl) => (
+                            <option key={tpl.name} value={tpl.name}>
+                              {tpl.name} ({tpl.language || 'en_US'})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 mb-1">Parameter 1 (e.g. Name)</label>
+                        <input
+                          type="text"
+                          value={templateParam1}
+                          onChange={(e) => setTemplateParam1(e.target.value)}
+                          placeholder="Recipient Name"
+                          className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 mb-1">Parameter 2 (e.g. Tour)</label>
+                        <input
+                          type="text"
+                          value={templateParam2}
+                          onChange={(e) => setTemplateParam2(e.target.value)}
+                          placeholder="Destination / Tour"
+                          className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center pt-1">
+                      <span className="text-[10px] text-indigo-700">
+                        Template messages bypass the 24-hour window per Meta Business messaging policy.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleSendWhatsAppReply}
+                        disabled={isSendingWa || !selectedTemplateName}
+                        className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-50 flex items-center gap-1.5 shadow-2xs"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" />
+                        {isSendingWa ? 'Sending...' : 'Send Template'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Sends directly via UTC WhatsApp Cloud API to {enquiry.customer?.whatsappNumber || enquiry.customer?.phone || 'client'}.
+                </p>
               </div>
             </div>
           </div>

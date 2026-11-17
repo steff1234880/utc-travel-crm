@@ -50,6 +50,10 @@ interface MetaConfigResponse {
     whatsapp: {
       connected: boolean;
       account: any | null;
+      phoneNumberId?: string;
+      wabaId?: string;
+      hasAccessToken?: boolean;
+      accessTokenMasked?: string;
     };
   };
   accounts: any[];
@@ -70,6 +74,13 @@ export default function MetaIntegrationTab() {
   const [trackPixel, setTrackPixel] = useState(true);
   const [trackCapi, setTrackCapi] = useState(true);
 
+  // WhatsApp Cloud API Form State
+  const [waPhoneNumberId, setWaPhoneNumberId] = useState('');
+  const [waWabaId, setWaWabaId] = useState('');
+  const [waAccessToken, setWaAccessToken] = useState('');
+  const [waConfigId, setWaConfigId] = useState('whatsapp_embedded_signup');
+  const [waTestStatus, setWaTestStatus] = useState<any | null>(null);
+
   // Quick Action / Testing states
   const [testPhone, setTestPhone] = useState('+18005558821');
   const [testMsg, setTestMsg] = useState('Hello from UTC Travel CRM! Your holiday inquiry is in progress.');
@@ -77,6 +88,92 @@ export default function MetaIntegrationTab() {
   const [testLeadEmail, setTestLeadEmail] = useState('johndoe@example.com');
   const [testLeadPhone, setTestLeadPhone] = useState('+14155550199');
   const [testPlatform, setTestPlatform] = useState<'FACEBOOK' | 'INSTAGRAM'>('FACEBOOK');
+  const [isEmbeddedSigningUp, setIsEmbeddedSigningUp] = useState(false);
+
+  // Meta JavaScript SDK / Embedded Signup Launcher
+  const launchEmbeddedSignup = () => {
+    if (!appId) {
+      setNotification({ type: 'error', message: 'Meta App ID is required before launching Embedded Signup.' });
+      return;
+    }
+
+    setIsEmbeddedSigningUp(true);
+
+    // Ensure Meta FB SDK script is present
+    const initAndLogin = () => {
+      const fb = (window as any).FB;
+      if (!fb) {
+        setNotification({ type: 'error', message: 'Meta JavaScript SDK failed to load. Please check your browser connection or content blocker.' });
+        setIsEmbeddedSigningUp(false);
+        return;
+      }
+
+      fb.init({
+        appId: appId,
+        autoLogAppEvents: true,
+        xfbml: true,
+        version: 'v21.0',
+      });
+
+      fb.login(
+        (response: any) => {
+          if (response.authResponse && response.authResponse.code) {
+            // Send authorization code to backend for token exchange and WABA discovery
+            api.post('/meta/oauth/callback', {
+              code: response.authResponse.code,
+              platform: 'WHATSAPP',
+              state: 'state_' + Date.now(),
+            })
+            .then((res: any) => {
+              setNotification({
+                type: 'success',
+                message: `WhatsApp Embedded Signup successful! Connected Phone: ${res.data.data.phoneNumber || 'Ready'}`
+              });
+              queryClient.invalidateQueries({ queryKey: ['meta-config'] });
+            })
+            .catch((err: any) => {
+              setNotification({
+                type: 'error',
+                message: err.response?.data?.message || 'Embedded Signup exchange failed.'
+              });
+            })
+            .finally(() => setIsEmbeddedSigningUp(false));
+          } else {
+            setIsEmbeddedSigningUp(false);
+            if (response.status !== 'connected') {
+              setNotification({ type: 'info', message: 'WhatsApp Embedded Signup was cancelled.' });
+            }
+          }
+        },
+        {
+          config_id: waConfigId || 'whatsapp_embedded_signup',
+          response_type: 'code',
+          override_default_response_type: true,
+          extras: {
+            setup: {
+              coexistence: true,
+            }
+          }
+        }
+      );
+    };
+
+    if (!(window as any).FB) {
+      const script = document.createElement('script');
+      script.id = 'facebook-jssdk';
+      script.src = 'https://connect.facebook.net/en_US/sdk.js';
+      script.async = true;
+      script.defer = true;
+      script.onload = initAndLogin;
+      script.onerror = () => {
+        setNotification({ type: 'error', message: 'Failed to load Meta JavaScript SDK script.' });
+        setIsEmbeddedSigningUp(false);
+      };
+      document.body.appendChild(script);
+    } else {
+      initAndLogin();
+    }
+  };
 
   const [notification, setNotification] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
 
@@ -94,6 +191,11 @@ export default function MetaIntegrationTab() {
       setAutoSyncLeads(cfg.autoSyncLeads);
       setTrackPixel(cfg.trackPixel);
       setTrackCapi(cfg.trackCapi);
+      if (res.data.data.connections?.whatsapp) {
+        const wa = res.data.data.connections.whatsapp;
+        if (wa.phoneNumberId) setWaPhoneNumberId(wa.phoneNumberId);
+        if (wa.wabaId) setWaWabaId(wa.wabaId);
+      }
       return res.data;
     },
   });
@@ -130,10 +232,17 @@ export default function MetaIntegrationTab() {
   const toggleAccountMutation = useMutation({
     mutationFn: async ({ platform, connect }: { platform: string; connect: boolean }) => {
       if (connect) {
+        const metadata: any = {};
+        if (platform === 'WHATSAPP') {
+          if (waPhoneNumberId) metadata.phone_number_id = waPhoneNumberId;
+          if (waWabaId) metadata.waba_id = waWabaId;
+        }
         return await api.post('/meta/connect', {
           platform,
-          accountId: `${platform.toLowerCase()}_utc_${Date.now().toString().slice(-4)}`,
-          accountName: `UTC Travel ${platform.charAt(0) + platform.slice(1).toLowerCase()} Account`,
+          accountId: platform === 'WHATSAPP' && waWabaId ? waWabaId : `${platform.toLowerCase()}_utc_${Date.now().toString().slice(-4)}`,
+          accountName: platform === 'WHATSAPP' ? 'UTC WhatsApp Cloud API' : `UTC Travel ${platform.charAt(0) + platform.slice(1).toLowerCase()} Account`,
+          accessToken: platform === 'WHATSAPP' && waAccessToken ? waAccessToken : undefined,
+          metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
         });
       } else {
         return await api.post('/meta/disconnect', { platform });
@@ -142,12 +251,39 @@ export default function MetaIntegrationTab() {
     onSuccess: (_, vars) => {
       setNotification({
         type: 'success',
-        message: `${vars.platform} account ${vars.connect ? 'connected' : 'disconnected'} successfully.`,
+        message: `${vars.platform} account ${vars.connect ? 'configured & connected' : 'disconnected'} successfully.`,
       });
+      if (vars.platform === 'WHATSAPP') setWaAccessToken('');
       queryClient.invalidateQueries({ queryKey: ['meta-config'] });
     },
     onError: (err: any) => {
       setNotification({ type: 'error', message: err?.response?.data?.message || 'Account action failed.' });
+    }
+  });
+
+  // 3.1 Mutation: Test WhatsApp Cloud API Connection
+  const testWaConnectionMutation = useMutation({
+    mutationFn: async () => {
+      const res = await api.post('/meta/whatsapp/test-connection', {
+        phoneNumberId: waPhoneNumberId || undefined,
+        accessToken: waAccessToken || undefined,
+      });
+      return res.data;
+    },
+    onSuccess: (res: any) => {
+      setWaTestStatus(res.data);
+      setNotification({
+        type: 'success',
+        message: `WhatsApp Connection Verified! Phone: ${res.data.phoneNumber || 'N/A'}, Quality: ${res.data.qualityRating || 'N/A'}`
+      });
+      queryClient.invalidateQueries({ queryKey: ['meta-config'] });
+    },
+    onError: (err: any) => {
+      setWaTestStatus(null);
+      setNotification({
+        type: 'error',
+        message: err?.response?.data?.message || 'WhatsApp Cloud API connectivity test failed.'
+      });
     }
   });
 
@@ -326,6 +462,13 @@ export default function MetaIntegrationTab() {
               {connections?.whatsapp?.account?.accountName || 'UTC WhatsApp Cloud API'}
             </p>
             <p className="text-xs text-slate-500 mt-1">2-Way Messaging & Approved Templates</p>
+
+            {/* Quick credentials overview */}
+            <div className="mt-3 space-y-1 text-[11px] text-slate-600 font-mono bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+              <div>Phone ID: {connections?.whatsapp?.phoneNumberId || waPhoneNumberId || 'Not set'}</div>
+              <div>WABA ID: {connections?.whatsapp?.wabaId || waWabaId || 'Not set'}</div>
+              <div>Token: {connections?.whatsapp?.hasAccessToken ? connections.whatsapp.accessTokenMasked : 'Not configured'}</div>
+            </div>
           </div>
 
           <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
@@ -343,6 +486,138 @@ export default function MetaIntegrationTab() {
               {connections?.whatsapp?.connected ? 'Disconnect' : 'Connect WhatsApp'}
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* WhatsApp Cloud API & Coexistence Management Card */}
+      <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-7 border border-emerald-100 shadow-sm space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-emerald-100 text-emerald-700 rounded-xl">
+              <MessageCircle className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">WhatsApp Cloud API Configuration</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Configure official Meta Cloud API credentials and manage WhatsApp Business App coexistence.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={launchEmbeddedSignup}
+              disabled={isEmbeddedSigningUp}
+              className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <ExternalLink className={`w-3.5 h-3.5 ${isEmbeddedSigningUp ? 'animate-spin' : ''}`} />
+              {isEmbeddedSigningUp ? 'Launching Signup...' : 'Launch Meta Embedded Signup'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => testWaConnectionMutation.mutate()}
+              disabled={testWaConnectionMutation.isPending}
+              className="px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${testWaConnectionMutation.isPending ? 'animate-spin' : ''}`} />
+              {testWaConnectionMutation.isPending ? 'Testing...' : 'Test WhatsApp Connection'}
+            </button>
+          </div>
+        </div>
+
+        {/* Coexistence Advisory Note */}
+        <div className="bg-blue-50/70 border border-blue-200/80 rounded-2xl p-4 text-xs space-y-1.5">
+          <div className="flex items-center gap-2 text-blue-900 font-bold">
+            <Info className="w-4 h-4 text-blue-600 shrink-0" />
+            <span>WhatsApp Business App Coexistence Support</span>
+          </div>
+          <p className="text-blue-800/90 leading-relaxed">
+            Meta Cloud API allows using the <strong>same phone number</strong> on both the UTC CRM Cloud API and the mobile WhatsApp Business App simultaneously (where Meta eligibility and regional roll-out allow). Ensure your phone number is registered within Meta Business Manager under Coexistence mode.
+          </p>
+        </div>
+
+        {/* Cloud API Fields */}
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+              WhatsApp Phone Number ID
+            </label>
+            <input
+              type="text"
+              value={waPhoneNumberId}
+              onChange={(e) => setWaPhoneNumberId(e.target.value)}
+              placeholder="e.g. 109827364519283"
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+              WhatsApp Business Account ID (WABA ID)
+            </label>
+            <input
+              type="text"
+              value={waWabaId}
+              onChange={(e) => setWaWabaId(e.target.value)}
+              placeholder="e.g. 192837465019284"
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+              Embedded Signup Config ID
+            </label>
+            <input
+              type="text"
+              value={waConfigId}
+              onChange={(e) => setWaConfigId(e.target.value)}
+              placeholder="whatsapp_embedded_signup"
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+              Permanent Token {connections?.whatsapp?.hasAccessToken && <span className="text-emerald-600 text-[10px]">({connections.whatsapp.accessTokenMasked})</span>}
+            </label>
+            <input
+              type="password"
+              value={waAccessToken}
+              onChange={(e) => setWaAccessToken(e.target.value)}
+              placeholder={connections?.whatsapp?.hasAccessToken ? 'Enter new token to update' : 'EAA...'}
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+        </div>
+
+        {/* Test Result Card */}
+        {waTestStatus && (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 text-xs space-y-2">
+            <div className="flex items-center gap-2 font-bold text-emerald-900">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <span>Verified WhatsApp Cloud API Endpoint</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-slate-700 font-mono text-[11px]">
+              <div>Phone: <span className="font-bold text-slate-900">{waTestStatus.phoneNumber || 'N/A'}</span></div>
+              <div>Name: <span className="font-bold text-slate-900">{waTestStatus.verifiedName || 'N/A'}</span></div>
+              <div>Quality: <span className="font-bold text-emerald-700">{waTestStatus.qualityRating || 'N/A'}</span></div>
+              <div>Verification: <span className="font-bold text-emerald-700">{waTestStatus.codeVerificationStatus || 'VERIFIED'}</span></div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-end pt-1">
+          <button
+            type="button"
+            onClick={() => toggleAccountMutation.mutate({ platform: 'WHATSAPP', connect: true })}
+            disabled={toggleAccountMutation.isPending}
+            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-colors disabled:opacity-50 shadow-sm"
+          >
+            {toggleAccountMutation.isPending ? 'Saving...' : 'Save WhatsApp API Credentials'}
+          </button>
         </div>
       </div>
 

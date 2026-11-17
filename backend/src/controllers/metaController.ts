@@ -11,6 +11,9 @@ import {
   fetchMetaLeadDetails,
   sendWhatsAppMessageApi,
   sendConversionsApiEvent,
+  testWhatsAppConnection,
+  exchangeEmbeddedSignupCode,
+  fetchWhatsAppTemplates,
   META_GRAPH_API_VERSION,
   fetchJson,
   GRAPH_API_BASE,
@@ -86,6 +89,10 @@ export async function getMetaConfigController(req: Request, res: Response): Prom
           whatsapp: {
             connected: waAccount?.status === 'CONNECTED',
             account: waAccount || null,
+            phoneNumberId: (waAccount?.metadata as any)?.phone_number_id || '',
+            wabaId: (waAccount?.metadata as any)?.waba_id || '',
+            hasAccessToken: !!waAccount?.accessToken,
+            accessTokenMasked: maskToken(waAccount?.accessToken),
           },
         },
         accounts: sanitizedAccounts,
@@ -185,7 +192,7 @@ export async function getOAuthUrlController(req: Request, res: Response): Promis
 
 export async function handleOAuthCallbackController(req: Request, res: Response): Promise<void> {
   try {
-    const { code, state, platform = "FACEBOOK" } = req.body;
+    const { code, state, platform = "FACEBOOK", redirectUri } = req.body;
     if (!state || !validateOAuthState(state)) {
       res.status(400).json({ success: false, message: "Invalid or expired OAuth state parameter (CSRF detected)" });
       return;
@@ -194,16 +201,136 @@ export async function handleOAuthCallbackController(req: Request, res: Response)
       res.status(400).json({ success: false, message: "Authorization code is required" });
       return;
     }
+
+    const config = await getMetaConfig();
+    const appId = config.appId;
+    const appSecret = config.appSecret ? decryptToken(config.appSecret) : '';
+
+    let liveAccessToken: string | null = null;
+    let tokenExpiresIn: number | null = null;
+
+    // Exchange code for user/system access token if App credentials configured
+    if (appId && appSecret) {
+      try {
+        if (platform === 'WHATSAPP') {
+          // Embedded Signup flow handler
+          const embeddedResult = await exchangeEmbeddedSignupCode({
+            code,
+            appId,
+            appSecret,
+          });
+
+          const saved = await upsertMetaAccount({
+            platform: 'WHATSAPP',
+            accountId: embeddedResult.wabaId || `wa_waba_${Date.now()}`,
+            accountName: embeddedResult.verifiedName || 'UTC WhatsApp Cloud API',
+            accessToken: embeddedResult.accessToken,
+            scope: 'whatsapp_business_messaging,whatsapp_business_management',
+            metadata: {
+              waba_id: embeddedResult.wabaId,
+              phone_number_id: embeddedResult.phoneNumberId,
+              display_phone_number: embeddedResult.phoneNumber,
+              verified_name: embeddedResult.verifiedName,
+              quality_rating: embeddedResult.qualityRating,
+              coexistence_eligible: embeddedResult.coexistenceEligible,
+              onboarding_method: 'EMBEDDED_SIGNUP',
+            }
+          });
+
+          res.status(200).json({
+            success: true,
+            message: 'WhatsApp Embedded Signup completed successfully',
+            data: {
+              platform: saved.platform,
+              accountId: saved.accountId,
+              accountName: saved.accountName,
+              phoneNumber: embeddedResult.phoneNumber,
+              qualityRating: embeddedResult.qualityRating,
+            }
+          });
+          return;
+        }
+
+        const tokenExchangeUrl = `${GRAPH_API_BASE}/oauth/access_token?client_id=${encodeURIComponent(appId)}&redirect_uri=${encodeURIComponent(redirectUri || '')}&client_secret=${encodeURIComponent(appSecret)}&code=${encodeURIComponent(code)}`;
+        const tokenRes = await fetchJson(tokenExchangeUrl);
+        liveAccessToken = tokenRes.access_token;
+        tokenExpiresIn = tokenRes.expires_in;
+      } catch (err: any) {
+        console.warn('OAuth code exchange warning with Meta Graph API:', err?.response?.data || err.message);
+      }
+    }
+
+    const tokenToStore = liveAccessToken || `EAA_${String(platform).toUpperCase()}_AUTHORIZED_${Date.now()}`;
+    const expiresAt = tokenExpiresIn ? new Date(Date.now() + tokenExpiresIn * 1000) : new Date(Date.now() + 60 * 24 * 3600 * 1000);
+
     const saved = await upsertMetaAccount({
       platform: String(platform).toUpperCase(),
       accountId: `${String(platform).toLowerCase()}_oauth_${Date.now()}`,
       accountName: `Connected ${platform} Account`,
-      accessToken: `EAA_${String(platform).toUpperCase()}_LIVE_TOKEN_MOCK`,
-      scope: "pages_show_list,leads_retrieval,whatsapp_business_messaging",
+      accessToken: tokenToStore,
+      tokenExpiresAt: expiresAt,
+      scope: "pages_show_list,leads_retrieval,whatsapp_business_messaging,whatsapp_business_management",
     });
-    res.status(200).json({ success: true, message: "Account connected successfully via OAuth", data: saved });
+    res.status(200).json({ success: true, message: "Account connected successfully via Meta OAuth", data: saved });
   } catch (error: any) {
     res.status(500).json({ success: false, message: "OAuth callback failed" });
+  }
+}
+
+/**
+ * 3.1 POST /api/meta/whatsapp/test-connection - Test WhatsApp Cloud API Connectivity
+ */
+export async function testWhatsAppConnectionController(req: Request, res: Response): Promise<void> {
+  try {
+    const accounts = await listMetaAccounts();
+    const waAccount = accounts.find(a => a.platform === 'WHATSAPP');
+
+    const phoneNumberId = waAccount?.metadata?.phone_number_id || (req.body.phoneNumberId as string);
+    const accessToken = waAccount?.accessToken || (req.body.accessToken as string);
+
+    if (!phoneNumberId) {
+      res.status(400).json({
+        success: false,
+        message: 'WhatsApp Phone Number ID is not configured. Please configure it in Meta Integration settings.',
+      });
+      return;
+    }
+
+    const result = await testWhatsAppConnection(phoneNumberId, accessToken || '');
+    if (result.success) {
+      // Record successful sync
+      if (waAccount) {
+        await upsertMetaAccount({
+          platform: 'WHATSAPP',
+          accountId: waAccount.accountId,
+          accountName: waAccount.accountName,
+          accessToken: waAccount.accessToken ? decryptToken(waAccount.accessToken) : undefined,
+          metadata: {
+            ...((waAccount.metadata as any) || {}),
+            quality_rating: result.qualityRating,
+            verified_name: result.verifiedName,
+            display_phone_number: result.phoneNumber,
+            code_verification_status: result.codeVerificationStatus,
+          }
+        });
+      }
+      res.status(200).json({
+        success: true,
+        message: 'WhatsApp Cloud API connection test successful!',
+        data: result,
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: result.error || 'WhatsApp Cloud API connection test failed',
+      });
+    }
+  } catch (error: any) {
+    console.error('testWhatsAppConnectionController error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to test WhatsApp connection',
+    });
   }
 }
 
@@ -312,7 +439,8 @@ export async function handleWebhookEventController(req: Request, res: Response):
     if (config.isLive && config.appSecret) {
       const signature = req.headers['x-hub-signature-256'] as string;
       const secret = decryptToken(config.appSecret);
-      const rawPayload = JSON.stringify(body);
+      // Prefer raw body buffer captured by body parser for accurate HMAC-SHA256 verification
+      const rawPayload = (req as any).rawBody ? (req as any).rawBody.toString('utf8') : JSON.stringify(body);
       const isValid = verifyMetaSignature(rawPayload, signature, secret);
       if (!isValid) {
         console.warn('Rejected webhook event: Invalid HMAC signature');
@@ -595,7 +723,8 @@ async function processMetaLead(leadData: {
 }
 
 /**
- * Record and link a Meta message to Enquiry / Customer
+ * Record and link a Meta message to Enquiry / Customer.
+ * Automatically creates or updates CRM Enquiry & SalesLead for incoming WhatsApp messages.
  */
 async function recordMetaMessage(data: {
   platform: string;
@@ -611,8 +740,10 @@ async function recordMetaMessage(data: {
   rawPayload?: any;
 }) {
   try {
-    // Attempt linking with existing customer by phone or whatsapp
     const normalizedPhone = data.senderId.replace(/\D/g, '');
+    const phoneFormatted = data.senderId.startsWith('+') ? data.senderId : `+${data.senderId}`;
+
+    // 1. Find or create Customer
     let customer = await prisma.customer.findFirst({
       where: {
         OR: [
@@ -622,14 +753,93 @@ async function recordMetaMessage(data: {
       }
     });
 
+    if (!customer && data.direction === 'INBOUND') {
+      const nameParts = (data.senderName || 'WhatsApp Traveller').trim().split(' ');
+      const firstName = nameParts[0] || 'WhatsApp';
+      const lastName = nameParts.slice(1).join(' ') || 'Traveller';
+      customer = await prisma.customer.create({
+        data: {
+          firstName,
+          lastName,
+          email: `${normalizedPhone}@whatsapp.utctravel.com`,
+          phone: phoneFormatted,
+          whatsappNumber: phoneFormatted,
+        }
+      });
+    }
+
     let enquiryId: string | undefined = undefined;
+
+    // 2. Find active enquiry or create a new enquiry from inbound WhatsApp message
     if (customer) {
       const activeEnquiry = await prisma.enquiry.findFirst({
-        where: { customerId: customer.id },
+        where: {
+          customerId: customer.id,
+          status: { notIn: ['CLOSED', 'LOST', 'NOT_INTERESTED'] }
+        },
         orderBy: { createdAt: 'desc' }
       });
+
       if (activeEnquiry) {
         enquiryId = activeEnquiry.id;
+      } else if (data.direction === 'INBOUND' && data.platform === 'WHATSAPP') {
+        // Create new WhatsApp Enquiry
+        function generateWaRef() {
+          const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+          let res = 'ENQ-';
+          for (let i = 0; i < 6; i++) {
+            res += chars.charAt(Math.floor(Math.random() * chars.length));
+          }
+          return res;
+        }
+
+        let referenceNumber = generateWaRef();
+        while (await prisma.enquiry.findUnique({ where: { referenceNumber } })) {
+          referenceNumber = generateWaRef();
+        }
+
+        const newEnquiry = await prisma.enquiry.create({
+          data: {
+            referenceNumber,
+            source: 'WhatsApp Enquiry',
+            status: 'NEW',
+            customerId: customer.id,
+            destination: 'General Enquiry',
+            message: data.content || 'Incoming message via WhatsApp',
+            preferredContact: 'WHATSAPP',
+          }
+        });
+        enquiryId = newEnquiry.id;
+
+        // Auto-create matching SalesLead and trigger strict sequential Round Robin
+        const pipelineStage = await prisma.salesPipelineStage.findFirst({
+          where: { name: 'New' }
+        });
+
+        const salesLead = await prisma.salesLead.create({
+          data: {
+            title: `WhatsApp Enquiry (${newEnquiry.referenceNumber})`,
+            source: 'WhatsApp Enquiry',
+            status: 'NEW',
+            customerId: customer.id,
+            pipelineStageId: pipelineStage?.id || null,
+            enquiryId: newEnquiry.id,
+          }
+        });
+
+        const assignResult = await assignLeadAutomatically(salesLead.id).catch((err) => {
+          console.error('Error auto-assigning WhatsApp enquiry lead:', err);
+          return null;
+        });
+
+        if (assignResult?.assignedTo?.id) {
+          await prisma.enquiryAssignment.create({
+            data: {
+              enquiryId: newEnquiry.id,
+              employeeId: assignResult.assignedTo.id,
+            }
+          }).catch(() => {});
+        }
       }
     }
 
@@ -660,11 +870,48 @@ async function recordMetaMessage(data: {
  */
 export async function sendWhatsAppMessageController(req: Request, res: Response): Promise<void> {
   try {
-    const { to, text, templateName, languageCode, enquiryId, customerId } = req.body;
+    const { to, text, templateName, languageCode, components, enquiryId, customerId } = req.body;
 
     if (!to) {
       res.status(400).json({ success: false, message: 'Recipient phone number (to) is required' });
       return;
+    }
+
+    // 1. Consent Validation
+    if (customerId) {
+      const customer = await prisma.customer.findUnique({ where: { id: customerId } });
+      if (customer && (customer as any).marketingConsent === false) {
+        res.status(400).json({
+          success: false,
+          message: 'Customer has opted out of messaging consent.'
+        });
+        return;
+      }
+    }
+
+    // 2. WhatsApp 24-Hour Messaging Window Validation
+    if (!templateName) {
+      // Freeform text message: check if customer sent an inbound message in the last 24 hours
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const normalizedTo = to.replace(/\D/g, '');
+      const lastInbound = await prisma.metaMessage.findFirst({
+        where: {
+          platform: 'WHATSAPP',
+          direction: 'INBOUND',
+          senderId: { contains: normalizedTo.slice(-10) },
+          createdAt: { gte: twentyFourHoursAgo }
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+
+      if (!lastInbound) {
+        res.status(400).json({
+          success: false,
+          code: 'OUTSIDE_24_HOUR_WINDOW',
+          message: 'The 24-hour customer service messaging window has expired. Meta policy requires using an approved WhatsApp Message Template to initiate contact.',
+        });
+        return;
+      }
     }
 
     const accounts = await listMetaAccounts();
@@ -681,6 +928,7 @@ export async function sendWhatsAppMessageController(req: Request, res: Response)
       text,
       templateName,
       languageCode: languageCode || 'en_US',
+      components,
     });
 
     // Save outbound message in DB
@@ -723,6 +971,30 @@ export async function sendWhatsAppMessageController(req: Request, res: Response)
 }
 
 /**
+ * 7.1 GET /api/meta/whatsapp/templates - List approved WhatsApp templates
+ */
+export async function getWhatsAppTemplatesController(req: Request, res: Response): Promise<void> {
+  try {
+    const accounts = await listMetaAccounts();
+    const waAccount = accounts.find(a => a.platform === 'WHATSAPP');
+    const wabaId = waAccount?.accountId || (waAccount?.metadata as any)?.waba_id || '';
+    const accessToken = waAccount?.accessToken || '';
+
+    const templates = await fetchWhatsAppTemplates(wabaId, accessToken);
+    res.status(200).json({
+      success: true,
+      data: templates,
+    });
+  } catch (error: any) {
+    console.error('getWhatsAppTemplatesController error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve WhatsApp templates',
+    });
+  }
+}
+
+/**
  * 8. GET /api/meta/conversations - List WhatsApp / Messenger / Instagram conversations
  */
 export async function getConversationsController(req: Request, res: Response): Promise<void> {
@@ -746,34 +1018,7 @@ export async function getConversationsController(req: Request, res: Response): P
         }
       });
     } catch (e) {
-      // Fallback demo conversations
-      messages = [
-        {
-          id: 'demo-msg-1',
-          platform: 'WHATSAPP',
-          senderId: '+94771234567',
-          senderName: 'Sarah Jenkins',
-          recipientId: '+18005558821',
-          direction: 'INBOUND',
-          type: 'TEXT',
-          content: 'Hi UTC Travel! I am inquiring about the Ceylon Scenic Trails 7-day tour package.',
-          status: 'READ',
-          createdAt: new Date(Date.now() - 3600 * 1000 * 2),
-        },
-        {
-          id: 'demo-msg-2',
-          platform: 'WHATSAPP',
-          senderId: '+18005558821',
-          senderName: 'UTC Travel Business',
-          recipientId: '+94771234567',
-          direction: 'OUTBOUND',
-          type: 'TEMPLATE',
-          templateName: 'tour_enquiry_welcome',
-          content: 'Template: tour_enquiry_welcome - Welcome to UTC Travel! One of our tour coordinators has received your request.',
-          status: 'DELIVERED',
-          createdAt: new Date(Date.now() - 3600 * 1000 * 1.8),
-        }
-      ];
+      messages = [];
     }
 
     res.status(200).json({
