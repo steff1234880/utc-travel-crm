@@ -89,11 +89,111 @@ export default function MetaIntegrationTab() {
   const [testLeadPhone, setTestLeadPhone] = useState('+14155550199');
   const [testPlatform, setTestPlatform] = useState<'FACEBOOK' | 'INSTAGRAM'>('FACEBOOK');
   const [isEmbeddedSigningUp, setIsEmbeddedSigningUp] = useState(false);
+  const [isConnectingInstagram, setIsConnectingInstagram] = useState(false);
+  const [isConnectingFacebook, setIsConnectingFacebook] = useState(false);
+
+  // Real Meta OAuth flow for Facebook Page (Lead Ads & Messenger)
+  const launchFacebookOAuth = async () => {
+    if (!appId) {
+      setNotification({ type: 'error', message: 'Meta App ID must be configured in settings before connecting Facebook Page.' });
+      return;
+    }
+
+    setIsConnectingFacebook(true);
+    try {
+      const redirectUri = typeof window !== 'undefined' ? `${window.location.origin}/admin/settings?tab=meta` : '';
+      const res = await api.get(`/meta/oauth/url?platform=FACEBOOK&redirectUri=${encodeURIComponent(redirectUri)}`);
+      if (res.data.success && res.data.data.authUrl) {
+        const authUrl = res.data.data.authUrl;
+        const width = 600;
+        const height = 700;
+        const left = window.screen.width / 2 - width / 2;
+        const top = window.screen.height / 2 - height / 2;
+        const popup = window.open(
+          authUrl,
+          'MetaOAuthPopup',
+          `toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=yes, resizable=yes, copyhistory=no, width=${width}, height=${height}, top=${top}, left=${left}`
+        );
+
+        if (!popup) {
+          window.location.href = authUrl;
+          return;
+        }
+
+        const pollTimer = window.setInterval(() => {
+          try {
+            if (popup.closed) {
+              window.clearInterval(pollTimer);
+              setIsConnectingFacebook(false);
+              queryClient.invalidateQueries({ queryKey: ['meta-config'] });
+            }
+          } catch (e) {
+            // Cross-origin restriction while browsing Meta
+          }
+        }, 1000);
+      } else {
+        setNotification({ type: 'error', message: res.data.message || 'Failed to generate Facebook authorization URL.' });
+        setIsConnectingFacebook(false);
+      }
+    } catch (err: any) {
+      setNotification({ type: 'error', message: err?.response?.data?.message || 'Error initializing Facebook OAuth.' });
+      setIsConnectingFacebook(false);
+    }
+  };
+
+  // Real Meta OAuth flow for Instagram Professional Account
+  const launchInstagramOAuth = async () => {
+    if (!appId) {
+      setNotification({ type: 'error', message: 'Meta App ID must be configured before connecting Instagram.' });
+      return;
+    }
+
+    setIsConnectingInstagram(true);
+    try {
+      const redirectUri = typeof window !== 'undefined' ? `${window.location.origin}/admin/settings?tab=meta` : '';
+      const res = await api.get(`/meta/oauth/url?platform=INSTAGRAM&redirectUri=${encodeURIComponent(redirectUri)}`);
+      if (res.data.success && res.data.data.authUrl) {
+        const authUrl = res.data.data.authUrl;
+        const width = 600;
+        const height = 700;
+        const left = window.screen.width / 2 - width / 2;
+        const top = window.screen.height / 2 - height / 2;
+        const popup = window.open(
+          authUrl,
+          'MetaOAuthPopup',
+          `toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=yes, resizable=yes, copyhistory=no, width=${width}, height=${height}, top=${top}, left=${left}`
+        );
+
+        if (!popup) {
+          window.location.href = authUrl;
+          return;
+        }
+
+        const pollTimer = window.setInterval(() => {
+          try {
+            if (popup.closed) {
+              window.clearInterval(pollTimer);
+              setIsConnectingInstagram(false);
+              queryClient.invalidateQueries({ queryKey: ['meta-config'] });
+            }
+          } catch (e) {
+            // Cross-origin restriction while browsing Meta
+          }
+        }, 1000);
+      } else {
+        setNotification({ type: 'error', message: res.data.message || 'Failed to generate Instagram authorization URL.' });
+        setIsConnectingInstagram(false);
+      }
+    } catch (err: any) {
+      setNotification({ type: 'error', message: err?.response?.data?.message || 'Error initializing Instagram OAuth.' });
+      setIsConnectingInstagram(false);
+    }
+  };
 
   // Meta JavaScript SDK / Embedded Signup Launcher
   const launchEmbeddedSignup = () => {
     if (!appId) {
-      setNotification({ type: 'error', message: 'Meta App ID is required before launching Embedded Signup.' });
+      setNotification({ type: 'error', message: 'Meta App ID is required before launching Embedded Signup. Please save your Meta App ID in the settings above.' });
       return;
     }
 
@@ -108,65 +208,76 @@ export default function MetaIntegrationTab() {
         return;
       }
 
-      fb.init({
-        appId: appId,
-        autoLogAppEvents: true,
-        xfbml: true,
-        version: 'v21.0',
-      });
+      try {
+        fb.init({
+          appId: appId,
+          autoLogAppEvents: true,
+          xfbml: true,
+          version: 'v21.0',
+        });
 
-      fb.login(
-        (response: any) => {
-          if (response.authResponse && response.authResponse.code) {
-            // Send authorization code to backend for token exchange and WABA discovery
-            api.post('/meta/oauth/callback', {
-              code: response.authResponse.code,
-              platform: 'WHATSAPP',
-              state: 'state_' + Date.now(),
-            })
-            .then((res: any) => {
-              setNotification({
-                type: 'success',
-                message: `WhatsApp Embedded Signup successful! Connected Phone: ${res.data.data.phoneNumber || 'Ready'}`
-              });
-              queryClient.invalidateQueries({ queryKey: ['meta-config'] });
-            })
-            .catch((err: any) => {
-              setNotification({
-                type: 'error',
-                message: err.response?.data?.message || 'Embedded Signup exchange failed.'
-              });
-            })
-            .finally(() => setIsEmbeddedSigningUp(false));
-          } else {
-            setIsEmbeddedSigningUp(false);
-            if (response.status !== 'connected') {
-              setNotification({ type: 'info', message: 'WhatsApp Embedded Signup was cancelled.' });
+        fb.login(
+          (response: any) => {
+            if (response?.authResponse?.code) {
+              // Send authorization code to backend for token exchange and WABA discovery
+              api.post('/meta/oauth/callback', {
+                code: response.authResponse.code,
+                platform: 'WHATSAPP',
+                state: 'state_' + Date.now(),
+              })
+              .then((res: any) => {
+                setNotification({
+                  type: 'success',
+                  message: `WhatsApp Embedded Signup successful! Connected Phone: ${res.data?.data?.phoneNumber || 'Ready'}`
+                });
+                queryClient.invalidateQueries({ queryKey: ['meta-config'] });
+              })
+              .catch((err: any) => {
+                setNotification({
+                  type: 'error',
+                  message: err.response?.data?.message || 'Embedded Signup exchange failed. Please ensure the Meta App ID and Secret are configured.'
+                });
+              })
+              .finally(() => setIsEmbeddedSigningUp(false));
+            } else {
+              setIsEmbeddedSigningUp(false);
+              if (response?.status !== 'connected') {
+                setNotification({ type: 'info', message: 'WhatsApp Embedded Signup was closed or cancelled.' });
+              }
+            }
+          },
+          {
+            config_id: waConfigId || 'whatsapp_embedded_signup',
+            response_type: 'code',
+            override_default_response_type: true,
+            extras: {
+              setup: {
+                coexistence: true,
+              }
             }
           }
-        },
-        {
-          config_id: waConfigId || 'whatsapp_embedded_signup',
-          response_type: 'code',
-          override_default_response_type: true,
-          extras: {
-            setup: {
-              coexistence: true,
-            }
-          }
-        }
-      );
+        );
+      } catch (sdkInitErr: any) {
+        setIsEmbeddedSigningUp(false);
+        setNotification({ type: 'error', message: sdkInitErr?.message || 'Failed to initialize Meta Facebook SDK' });
+      }
     };
 
     if (!(window as any).FB) {
+      const existingScript = document.getElementById('facebook-jssdk');
+      if (existingScript) {
+        existingScript.remove();
+      }
       const script = document.createElement('script');
       script.id = 'facebook-jssdk';
       script.src = 'https://connect.facebook.net/en_US/sdk.js';
       script.async = true;
       script.defer = true;
-      script.onload = initAndLogin;
+      script.onload = () => {
+        setTimeout(initAndLogin, 50);
+      };
       script.onerror = () => {
-        setNotification({ type: 'error', message: 'Failed to load Meta JavaScript SDK script.' });
+        setNotification({ type: 'error', message: 'Failed to load Meta JavaScript SDK script. Please disable ad-blockers and try again.' });
         setIsEmbeddedSigningUp(false);
       };
       document.body.appendChild(script);
@@ -400,16 +511,23 @@ export default function MetaIntegrationTab() {
             <span className="text-[11px] text-slate-400">
               {connections?.facebook?.connected ? 'Auto-sync active' : 'Offline'}
             </span>
-            <button
-              onClick={() => toggleAccountMutation.mutate({ platform: 'FACEBOOK', connect: !connections?.facebook?.connected })}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
-                connections?.facebook?.connected
-                  ? 'bg-rose-50 text-rose-600 hover:bg-rose-100'
-                  : 'bg-blue-600 text-white hover:bg-blue-700'
-              }`}
-            >
-              {connections?.facebook?.connected ? 'Disconnect' : 'Connect Page'}
-            </button>
+            {connections?.facebook?.connected ? (
+              <button
+                onClick={() => toggleAccountMutation.mutate({ platform: 'FACEBOOK', connect: false })}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold transition-colors bg-rose-50 text-rose-600 hover:bg-rose-100"
+              >
+                Disconnect
+              </button>
+            ) : (
+              <button
+                onClick={launchFacebookOAuth}
+                disabled={isConnectingFacebook}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold transition-colors bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <ExternalLink className={`w-3 h-3 ${isConnectingFacebook ? 'animate-spin' : ''}`} />
+                {isConnectingFacebook ? 'Connecting...' : 'Connect Page'}
+              </button>
+            )}
           </div>
         </div>
 
@@ -434,16 +552,23 @@ export default function MetaIntegrationTab() {
             <span className="text-[11px] text-slate-400">
               {connections?.instagram?.connected ? 'Auto-sync active' : 'Offline'}
             </span>
-            <button
-              onClick={() => toggleAccountMutation.mutate({ platform: 'INSTAGRAM', connect: !connections?.instagram?.connected })}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
-                connections?.instagram?.connected
-                  ? 'bg-rose-50 text-rose-600 hover:bg-rose-100'
-                  : 'bg-gradient-to-r from-pink-600 to-purple-600 text-white hover:opacity-95'
-              }`}
-            >
-              {connections?.instagram?.connected ? 'Disconnect' : 'Connect Instagram'}
-            </button>
+            {connections?.instagram?.connected ? (
+              <button
+                onClick={() => toggleAccountMutation.mutate({ platform: 'INSTAGRAM', connect: false })}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold transition-colors bg-rose-50 text-rose-600 hover:bg-rose-100"
+              >
+                Disconnect
+              </button>
+            ) : (
+              <button
+                onClick={launchInstagramOAuth}
+                disabled={isConnectingInstagram}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold transition-colors bg-gradient-to-r from-pink-600 to-purple-600 text-white hover:opacity-95 disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <ExternalLink className={`w-3 h-3 ${isConnectingInstagram ? 'animate-spin' : ''}`} />
+                {isConnectingInstagram ? 'Connecting...' : 'Connect Instagram'}
+              </button>
+            )}
           </div>
         </div>
 
@@ -475,16 +600,24 @@ export default function MetaIntegrationTab() {
             <span className="text-[11px] text-slate-400">
               {connections?.whatsapp?.connected ? 'Cloud API Ready' : 'Offline'}
             </span>
-            <button
-              onClick={() => toggleAccountMutation.mutate({ platform: 'WHATSAPP', connect: !connections?.whatsapp?.connected })}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
-                connections?.whatsapp?.connected
-                  ? 'bg-rose-50 text-rose-600 hover:bg-rose-100'
-                  : 'bg-emerald-600 text-white hover:bg-emerald-700'
-              }`}
-            >
-              {connections?.whatsapp?.connected ? 'Disconnect' : 'Connect WhatsApp'}
-            </button>
+            {connections?.whatsapp?.connected ? (
+              <button
+                onClick={() => toggleAccountMutation.mutate({ platform: 'WHATSAPP', connect: false })}
+                disabled={toggleAccountMutation.isPending}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold transition-colors bg-rose-50 text-rose-600 hover:bg-rose-100 disabled:opacity-50"
+              >
+                {toggleAccountMutation.isPending ? 'Disconnecting...' : 'Disconnect'}
+              </button>
+            ) : (
+              <button
+                onClick={launchEmbeddedSignup}
+                disabled={isEmbeddedSigningUp}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold transition-colors bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
+              >
+                <ExternalLink className={`w-3 h-3 ${isEmbeddedSigningUp ? 'animate-spin' : ''}`} />
+                {isEmbeddedSigningUp ? 'Launching Signup...' : 'Connect WhatsApp'}
+              </button>
+            )}
           </div>
         </div>
       </div>
