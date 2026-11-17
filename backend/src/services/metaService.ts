@@ -116,7 +116,7 @@ export async function updateMetaConfig(updates: Partial<any>): Promise<any> {
 export async function listMetaAccounts(): Promise<any[]> {
   try {
     return await prisma.metaAccount.findMany({
-      orderBy: { createdAt: 'asc' },
+      orderBy: { updatedAt: 'desc' },
     });
   } catch (err) {
     return inMemoryAccounts;

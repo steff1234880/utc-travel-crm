@@ -52,6 +52,7 @@ interface MetaConfigResponse {
       account: any | null;
       phoneNumberId?: string;
       wabaId?: string;
+      businessEmail?: string;
       hasAccessToken?: boolean;
       accessTokenMasked?: string;
     };
@@ -77,6 +78,7 @@ export default function MetaIntegrationTab() {
   // WhatsApp Cloud API Form State
   const [waPhoneNumberId, setWaPhoneNumberId] = useState('');
   const [waWabaId, setWaWabaId] = useState('');
+  const [waBusinessEmail, setWaBusinessEmail] = useState('');
   const [waAccessToken, setWaAccessToken] = useState('');
   const [waConfigId, setWaConfigId] = useState('whatsapp_embedded_signup');
   const [waTestStatus, setWaTestStatus] = useState<any | null>(null);
@@ -306,6 +308,7 @@ export default function MetaIntegrationTab() {
         const wa = res.data.data.connections.whatsapp;
         if (wa.phoneNumberId) setWaPhoneNumberId(wa.phoneNumberId);
         if (wa.wabaId) setWaWabaId(wa.wabaId);
+        if (wa.businessEmail) setWaBusinessEmail(wa.businessEmail);
       }
       return res.data;
     },
@@ -351,6 +354,7 @@ export default function MetaIntegrationTab() {
           }
           metadata.phone_number_id = waPhoneNumberId.trim();
           if (waWabaId) metadata.waba_id = waWabaId.trim();
+          if (waBusinessEmail) metadata.business_email = waBusinessEmail.trim();
           accountId = waWabaId ? waWabaId.trim() : waPhoneNumberId.trim();
         } else {
           accountId = `${platform.toLowerCase()}_utc_${Date.now().toString().slice(-4)}`;
@@ -681,7 +685,7 @@ export default function MetaIntegrationTab() {
         </div>
 
         {/* Cloud API Fields */}
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1.5">
               WhatsApp Phone Number ID
@@ -704,6 +708,19 @@ export default function MetaIntegrationTab() {
               value={waWabaId}
               onChange={(e) => setWaWabaId(e.target.value)}
               placeholder="e.g. 192837465019284"
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+              Business Email ID
+            </label>
+            <input
+              type="email"
+              value={waBusinessEmail}
+              onChange={(e) => setWaBusinessEmail(e.target.value)}
+              placeholder="e.g. business@utctravel.com"
               className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>

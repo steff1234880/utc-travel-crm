@@ -18,7 +18,7 @@ import {
   fetchJson,
   GRAPH_API_BASE,
 } from '../services/metaService';
-import { verifyMetaSignature, maskToken, decryptToken } from '../utils/metaCrypto';
+import { verifyMetaSignature, maskToken, decryptToken, encryptToken } from '../utils/metaCrypto';
 
 function generateRef() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -52,10 +52,11 @@ export async function getMetaConfigController(req: Request, res: Response): Prom
       hasToken: !!a.accessToken,
     }));
 
-    // Find platform specific status
+    // Find platform specific status (prefer most recently updated active account)
     const fbAccount = accounts.find(a => a.platform === 'FACEBOOK');
     const igAccount = accounts.find(a => a.platform === 'INSTAGRAM');
     const waAccount = accounts.find(a => a.platform === 'WHATSAPP');
+    const waMetadata = (waAccount?.metadata as any) || {};
 
     res.status(200).json({
       success: true,
@@ -89,8 +90,9 @@ export async function getMetaConfigController(req: Request, res: Response): Prom
           whatsapp: {
             connected: waAccount?.status === 'CONNECTED',
             account: waAccount || null,
-            phoneNumberId: (waAccount?.metadata as any)?.phone_number_id || '',
-            wabaId: (waAccount?.metadata as any)?.waba_id || '',
+            phoneNumberId: waMetadata.phone_number_id || '',
+            wabaId: waMetadata.waba_id || (waAccount?.accountId?.startsWith('whatsapp_utc_') ? '' : waAccount?.accountId) || '',
+            businessEmail: waMetadata.business_email || waMetadata.email || '',
             hasAccessToken: !!waAccount?.accessToken,
             accessTokenMasked: maskToken(waAccount?.accessToken),
           },
@@ -442,9 +444,17 @@ export async function connectAccountController(req: Request, res: Response): Pro
     let verifiedAccountName = accountName;
 
     if (platform.toUpperCase() === 'WHATSAPP') {
-      const phoneNumberId = metadata?.phone_number_id || accountId;
-      if (accessToken && !accessToken.startsWith('EAA_DEMO_')) {
-        const testRes = await testWhatsAppConnection(phoneNumberId, accessToken);
+      // Find existing WhatsApp account to preserve token or metadata if needed
+      const existingWa = await prisma.metaAccount.findFirst({
+        where: { platform: 'WHATSAPP' },
+        orderBy: { updatedAt: 'desc' },
+      });
+
+      const effectiveToken = accessToken || (existingWa?.accessToken ? decryptToken(existingWa.accessToken) : undefined);
+      const phoneNumberId = metadata?.phone_number_id || (existingWa?.metadata as any)?.phone_number_id || accountId;
+
+      if (effectiveToken && !effectiveToken.startsWith('EAA_DEMO_')) {
+        const testRes = await testWhatsAppConnection(phoneNumberId, effectiveToken);
         if (testRes.success) {
           accountStatus = 'CONNECTED';
           if (testRes.verifiedName) verifiedAccountName = testRes.verifiedName;
@@ -462,11 +472,7 @@ export async function connectAccountController(req: Request, res: Response): Pro
           accountStatus = 'DISCONNECTED';
         }
       } else if (isLive) {
-        // If live and no token provided, check if existing account has one
-        const existing = await prisma.metaAccount.findFirst({
-          where: { platform: 'WHATSAPP', accountId }
-        });
-        if (!existing?.accessToken) {
+        if (!effectiveToken) {
           res.status(400).json({
             success: false,
             message: 'Live mode active: A genuine System User access token is required to connect WhatsApp.',
@@ -474,6 +480,62 @@ export async function connectAccountController(req: Request, res: Response): Pro
           return;
         }
       }
+
+      // Merge metadata with existing WhatsApp metadata
+      const mergedMetadata = {
+        ...((existingWa?.metadata as any) || {}),
+        ...(metadata || {}),
+      };
+
+      // Ensure stable primary WhatsApp account record to prevent duplicate stale records
+      let savedWa: any;
+      if (existingWa) {
+        const encrypted = effectiveToken ? encryptToken(effectiveToken) : existingWa.accessToken;
+        savedWa = await prisma.metaAccount.update({
+          where: { id: existingWa.id },
+          data: {
+            accountId,
+            accountName: verifiedAccountName || existingWa.accountName || 'UTC WhatsApp Cloud API',
+            status: accountStatus,
+            accessToken: encrypted,
+            metadata: mergedMetadata,
+            lastSyncAt: new Date(),
+            errorMessage: null,
+          }
+        });
+
+        // Clean up any other duplicate WhatsApp records to prevent stale data conflicts
+        await prisma.metaAccount.deleteMany({
+          where: {
+            platform: 'WHATSAPP',
+            id: { not: savedWa.id }
+          }
+        }).catch(() => {});
+      } else {
+        savedWa = await upsertMetaAccount({
+          platform: 'WHATSAPP',
+          accountId,
+          accountName: verifiedAccountName || 'UTC WhatsApp Cloud API',
+          accessToken: effectiveToken,
+          scope,
+          metadata: mergedMetadata,
+          status: accountStatus,
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        message: `Successfully updated WhatsApp API credentials (${savedWa.status === 'CONNECTED' ? 'Connected' : 'Saved'})`,
+        data: {
+          id: savedWa.id,
+          platform: savedWa.platform,
+          accountId: savedWa.accountId,
+          accountName: savedWa.accountName,
+          status: savedWa.status,
+          metadata: savedWa.metadata,
+        }
+      });
+      return;
     } else if (config.isLive && (!accessToken || accessToken.startsWith('EAA_DEMO_'))) {
       res.status(400).json({
         success: false,
