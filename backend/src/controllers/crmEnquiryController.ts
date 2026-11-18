@@ -408,7 +408,7 @@ async function verifyEnquiryOwnership(enquiryId: string, req: Request): Promise<
         orderBy: { scheduledFor: 'asc' } 
       },
       statusHistory: { orderBy: { createdAt: 'asc' } },
-      messages: { orderBy: { createdAt: 'asc' } },
+      metaMessages: { orderBy: { createdAt: 'asc' } },
     }
   });
 
@@ -416,9 +416,15 @@ async function verifyEnquiryOwnership(enquiryId: string, req: Request): Promise<
     return { allowed: false, errorStatus: 404, errorMessage: 'Enquiry not found.' };
   }
 
+  // Map metaMessages to messages for frontend compatibility
+  const enrichedEnquiry = {
+    ...enquiry,
+    messages: (enquiry as any).metaMessages || [],
+  };
+
   // CEO, Super Admin, and Sales Manager have full company-wide enquiry access
   if (access.isSuperOrAdmin || access.isSalesManager) {
-    return { allowed: true, enquiry };
+    return { allowed: true, enquiry: enrichedEnquiry as any };
   }
 
   // Sales Executive: Must be assigned in EnquiryAssignment or linked SalesLead
@@ -437,7 +443,7 @@ async function verifyEnquiryOwnership(enquiryId: string, req: Request): Promise<
     }
   }
 
-  return { allowed: true, enquiry };
+  return { allowed: true, enquiry: enrichedEnquiry as any };
 }
 
 // ─── CRM: List Enquiries ──────────────────────────────────────────────────────

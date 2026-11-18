@@ -19,6 +19,7 @@ import {
   GRAPH_API_BASE,
 } from '../services/metaService';
 import { verifyMetaSignature, maskToken, decryptToken, encryptToken } from '../utils/metaCrypto';
+import { sendUpgrowWhatsAppMessage, getUpgrowApiKey } from '../services/upgrowWhatsAppService';
 
 function generateRef() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -1168,6 +1169,38 @@ export async function sendWhatsAppMessageController(req: Request, res: Response)
 
     const accounts = await listMetaAccounts();
     const waAccount = accounts.find(a => a.platform === 'WHATSAPP');
+    const upgrowKey = getUpgrowApiKey();
+
+    // If Upgrow WhatsApp is configured, dispatch through Upgrow Sales Flow
+    if (upgrowKey) {
+      const upgrowRes = await sendUpgrowWhatsAppMessage({
+        to,
+        text,
+        type: templateName ? 'template' : 'text',
+        templateName,
+        enquiryId,
+        customerId,
+      });
+
+      if (upgrowRes.success) {
+        res.status(200).json({
+          success: true,
+          message: 'WhatsApp message dispatched successfully via Upgrow Sales Flow',
+          data: {
+            messageId: upgrowRes.messageId,
+            recipient: to,
+            status: upgrowRes.status,
+          }
+        });
+        return;
+      } else {
+        res.status(400).json({
+          success: false,
+          message: upgrowRes.error || 'Failed to dispatch WhatsApp message via Upgrow',
+        });
+        return;
+      }
+    }
 
     const phoneNumberId = waAccount?.metadata?.phone_number_id || 'DEMO_PHONE_NUMBER_ID';
     const accessToken = waAccount?.accessToken || 'EAA_DEMO_WHATSAPP_TOKEN';

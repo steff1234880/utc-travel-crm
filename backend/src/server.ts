@@ -35,6 +35,7 @@ import timelineRoutes from './routes/timelineRoutes';
 import notificationRoutes from './routes/notificationRoutes';
 import tourPricingRoutes from './routes/tourPricingRoutes';
 import incentiveRoutes from './routes/incentiveRoutes';
+import upgrowRoutes from './routes/upgrowRoutes';
 
 // RBAC & Security Routes
 import userRoutes from './routes/userRoutes';
@@ -77,6 +78,7 @@ app.use('/api/packages', packageRoutes);
 app.use('/packages', packageRoutes); // Route alias for public / direct frontend calls
 app.use('/api/settings', settingsRoutes);
 app.use('/api/meta', metaRoutes);
+app.use('/api/upgrow/whatsapp', upgrowRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/crm/sales', salesRoutes);
 app.use('/api/crm/leads', leadRoutes);
