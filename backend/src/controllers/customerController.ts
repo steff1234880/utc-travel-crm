@@ -144,7 +144,7 @@ export const deleteCustomer = async (req: Request, res: Response) => {
       // Find all sales lead IDs belonging to customer
       const salesLeads = await tx.salesLead.findMany({
         where: { customerId: id },
-        select: { id: true }
+        select: { id: true, title: true, source: true, status: true }
       });
       const salesLeadIds = salesLeads.map(l => l.id);
 
@@ -191,6 +191,44 @@ export const deleteCustomer = async (req: Request, res: Response) => {
         await tx.salesLead.deleteMany({
           where: { customerId: id }
         });
+
+        // Capture actor info for customer lead deletion
+        const deletingUserId = req.user?.userId;
+        const deletingUserEmail = req.user?.email || 'Unknown';
+        let actorName = deletingUserEmail;
+
+        if (deletingUserId) {
+          const actorUser = await tx.user.findUnique({
+            where: { id: deletingUserId },
+            include: { employee: true }
+          });
+          if (actorUser?.employee) {
+            actorName = `${actorUser.employee.firstName} ${actorUser.employee.lastName}`.trim();
+          }
+        }
+
+        const customerFullName = `${customer.firstName} ${customer.lastName || ''}`.trim();
+        for (const lead of salesLeads) {
+          await tx.auditLog.create({
+            data: {
+              userId: deletingUserId || null,
+              userEmail: deletingUserEmail,
+              action: 'LEAD_DELETED',
+              module: 'Sales CRM',
+              recordId: lead.id,
+              previousValue: JSON.stringify({
+                id: lead.id,
+                title: lead.title,
+                source: lead.source,
+                status: lead.status,
+                customerId: id,
+                customerName: customerFullName,
+                deletedViaCustomer: true
+              }),
+              details: `${actorName} deleted lead ${lead.title || 'Untitled Lead'}`
+            }
+          }).catch(() => {});
+        }
       }
 
       // Delete enquiries for customer

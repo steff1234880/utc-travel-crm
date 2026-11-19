@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
 import { assignLeadAutomatically } from '../services/leadAssignmentService';
+import { resolveDefaultPipelineStageId } from '../services/pipelineStageService';
 import {
   getMetaConfig,
   updateMetaConfig,
@@ -900,9 +901,7 @@ async function processMetaLead(leadData: {
     });
 
     // 5. Hybrid Automatic CRM Lead Assignment
-    const pipelineStage = await prisma.salesPipelineStage.findFirst({
-      where: { name: 'New' }
-    });
+    const pipelineStageId = await resolveDefaultPipelineStageId();
 
     const salesLead = await prisma.salesLead.create({
       data: {
@@ -910,7 +909,7 @@ async function processMetaLead(leadData: {
         source: enquiry.source,
         status: 'NEW',
         customerId: customer.id,
-        pipelineStageId: pipelineStage?.id || null,
+        pipelineStageId,
         enquiryId: enquiry.id,
       }
     });
@@ -1065,9 +1064,7 @@ async function recordMetaMessage(data: {
         enquiryId = newEnquiry.id;
 
         // Auto-create matching SalesLead and trigger strict sequential Round Robin
-        const pipelineStage = await prisma.salesPipelineStage.findFirst({
-          where: { name: 'New' }
-        });
+        const pipelineStageId = await resolveDefaultPipelineStageId();
 
         const salesLead = await prisma.salesLead.create({
           data: {
@@ -1075,7 +1072,7 @@ async function recordMetaMessage(data: {
             source: sourceName,
             status: 'NEW',
             customerId: customer.id,
-            pipelineStageId: pipelineStage?.id || null,
+            pipelineStageId,
             enquiryId: newEnquiry.id,
           }
         });

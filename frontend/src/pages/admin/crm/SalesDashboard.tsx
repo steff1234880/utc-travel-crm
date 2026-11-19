@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Activity, DollarSign, Users, Briefcase, TrendingUp, XCircle, Layers } from 'lucide-react';
+import { Activity, DollarSign, Users, Briefcase, TrendingUp, XCircle, Layers, Trash2 } from 'lucide-react';
 import api from '../../../services/api';
 import QuickAttendanceWidget from '../../../components/admin/QuickAttendanceWidget';
 import LeadAssignmentOverviewModal from '../../../components/admin/crm/LeadAssignmentOverviewModal';
@@ -113,23 +113,28 @@ const SalesDashboard = () => {
         </h2>
         {metrics?.recentActivity?.length > 0 ? (
           <div className="space-y-4">
-            {metrics.recentActivity.map((activity: any) => (
-              <div key={activity.id} className="flex items-start gap-4 p-4 border border-gray-50 rounded-xl bg-gray-50/50 hover:bg-gray-50 transition-colors">
-                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
-                  <Activity className="w-5 h-5 text-blue-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-900">{activity.description}</p>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
-                    <span className="flex items-center gap-1 font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">{activity.type}</span>
-                    <span>By: <span className="font-medium text-gray-700">{activity.actor}</span></span>
-                    <span>Target: <span className="font-medium text-gray-700">{activity.target}</span></span>
-                    <span className="text-gray-400">•</span>
-                    <span>{new Date(activity.timestamp).toLocaleString()}</span>
+            {metrics.recentActivity.map((activity: any) => {
+              const isDeletion = activity.type === 'LEAD_DELETED' || activity.type === 'DELETE' || (activity.description && activity.description.toLowerCase().includes('deleted lead'));
+              return (
+                <div key={activity.id} className={`flex items-start gap-4 p-4 border rounded-xl transition-colors ${isDeletion ? 'border-red-100 bg-red-50/30 hover:bg-red-50/50' : 'border-gray-50 bg-gray-50/50 hover:bg-gray-50'}`}>
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isDeletion ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
+                    {isDeletion ? <Trash2 className="w-5 h-5" /> : <Activity className="w-5 h-5" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-semibold ${isDeletion ? 'text-red-950' : 'text-gray-900'}`}>{activity.description}</p>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+                      <span className={`flex items-center gap-1 font-medium px-2 py-0.5 rounded-full ${isDeletion ? 'text-red-700 bg-red-100' : 'text-blue-600 bg-blue-50'}`}>
+                        {activity.type}
+                      </span>
+                      <span>By: <span className="font-medium text-gray-700">{activity.actor}</span></span>
+                      <span>Target: <span className="font-medium text-gray-700">{activity.target}</span></span>
+                      <span className="text-gray-400">•</span>
+                      <span>{new Date(activity.timestamp).toLocaleString()}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div className="text-gray-500 text-sm text-center py-8 bg-gray-50 rounded-xl border border-dashed border-gray-200">

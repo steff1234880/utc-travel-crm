@@ -14,6 +14,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { operationsService, CoordinatorEmployee, Tour } from '../../../services/operationsService';
+import { formatBookingDate } from '../../../utils/timeUtils';
 
 const REPORTS = [
   { id: 'tours', label: '1. Tour Operations Report', icon: Compass },
@@ -346,7 +347,7 @@ export default function OperationsReports() {
                         <td className="py-3 px-4 font-mono font-semibold text-indigo-600">{h.tour?.tourReference || '-'}</td>
                         <td className="py-3 px-4">{h.customer?.firstName} {h.customer?.lastName}</td>
                         <td className="py-3 px-4">
-                          {new Date(h.checkInDate).toLocaleDateString('en-GB')} - {new Date(h.checkOutDate).toLocaleDateString('en-GB')}
+                          {formatBookingDate(h.checkInDate)} - {formatBookingDate(h.checkOutDate)}
                         </td>
                         <td className="py-3 px-4 font-mono font-bold">{h.confirmationNumber || '-'}</td>
                         <td className="py-3 px-4 font-bold">{h.reservationStatus}</td>

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
 import { z } from 'zod';
 import { assignLeadAutomatically, assignLeadManually } from '../services/leadAssignmentService';
+import { resolveDefaultPipelineStageId } from '../services/pipelineStageService';
 
 // ─── Zod Schemas ─────────────────────────────────────────────────────────────
 
@@ -250,50 +251,46 @@ export async function submitEnquiry(req: Request, res: Response): Promise<void> 
     });
 
     // 8. Create corresponding CRM Sales Lead in "New" pipeline stage
-    const pipelineStage = await prisma.salesPipelineStage.findFirst({
-      where: { name: 'New' }
-    });
-
-    if (pipelineStage) {
-      try {
-        const createdLead = await prisma.salesLead.create({
-          data: {
-            title: isCustomTour 
-              ? `Custom Tour: ${data.destination || 'General'} (${enquiry.referenceNumber})`
-              : `Package Booking (${tierInfo.name}): ${enquiry.referenceNumber}`,
-            source: sourceTag,
-            status: 'NEW',
-            expectedValue: calculatedTotal,
-            currency: 'INR',
-            customerId: customer.id,
-            pipelineStageId: pipelineStage.id,
-            enquiryId: enquiry.id
-          }
-        });
-
-        // Trigger Hybrid Automatic Lead Assignment
-        const assignResult = await assignLeadAutomatically(createdLead.id).catch((e) => {
-          console.error('Lead auto-assignment warning:', e);
-          return null;
-        });
-
-        // Synchronize EnquiryAssignment with assigned Sales Executive
-        if (assignResult?.assignedTo?.id) {
-          const existingAssignment = await prisma.enquiryAssignment.findFirst({
-            where: { enquiryId: enquiry.id, employeeId: assignResult.assignedTo.id }
-          });
-          if (!existingAssignment) {
-            await prisma.enquiryAssignment.create({
-              data: {
-                enquiryId: enquiry.id,
-                employeeId: assignResult.assignedTo.id
-              }
-            }).catch((err) => console.error('EnquiryAssignment sync warning:', err));
-          }
+    try {
+      const pipelineStageId = await resolveDefaultPipelineStageId();
+      const createdLead = await prisma.salesLead.create({
+        data: {
+          title: isCustomTour 
+            ? `Custom Tour: ${data.destination || 'General'} (${enquiry.referenceNumber})`
+            : `Package Booking (${tierInfo.name}): ${enquiry.referenceNumber}`,
+          source: sourceTag,
+          status: 'NEW',
+          expectedValue: calculatedTotal,
+          currency: 'INR',
+          customerId: customer.id,
+          pipelineStageId,
+          enquiryId: enquiry.id
         }
-      } catch (e) {
-        console.error('Sales lead creation warning:', e);
+      });
+
+      // Trigger Hybrid Automatic Lead Assignment
+      const autoAssignResult = await assignLeadAutomatically(createdLead.id).catch((e) => {
+        console.error('Lead auto-assignment warning:', e);
+        return null;
+      });
+
+      // Synchronize EnquiryAssignment with assigned Sales Executive
+      if (autoAssignResult && autoAssignResult.assignedTo && autoAssignResult.assignedTo.id) {
+        const assignedEmployeeId = autoAssignResult.assignedTo.id;
+        const existingAssignment = await prisma.enquiryAssignment.findFirst({
+          where: { enquiryId: enquiry.id, employeeId: assignedEmployeeId }
+        });
+        if (!existingAssignment) {
+          await prisma.enquiryAssignment.create({
+            data: {
+              enquiryId: enquiry.id,
+              employeeId: assignedEmployeeId
+            }
+          }).catch((err) => console.error('EnquiryAssignment sync warning:', err));
+        }
       }
+    } catch (e) {
+      console.error('Sales lead creation warning:', e);
     }
 
     // 9. Status History Log
@@ -595,39 +592,35 @@ export async function updateEnquiryStatus(req: Request, res: Response): Promise<
         where: { enquiryId: id as string }
       });
 
-      const pipelineStage = await prisma.salesPipelineStage.findFirst({
-        where: { name: mappedStageName }
-      });
+      const stageId = await resolveDefaultPipelineStageId(mappedStageName);
 
-      if (pipelineStage) {
-        if (!existingLead) {
-          createdNewLead = true;
-          // Lead doesn't exist yet, create it and map it to the stage
-          // If enquiry already has an assigned employee, preserve that ownership!
-          txOperations.push(
-            prisma.salesLead.create({
-              data: {
-                title: `Enquiry: ${existing.referenceNumber}`,
-                source: existing.source || 'Website',
-                status: 'NEW',
-                customerId: existing.customerId,
-                pipelineStageId: pipelineStage.id,
-                enquiryId: id as string,
-                assignedToId: assignedEmployeeId,
-                assignmentType: assignedEmployeeId ? 'MANUAL' : undefined,
-                assignedAt: assignedEmployeeId ? new Date() : undefined,
-              }
-            })
-          );
-        } else {
-          // Lead exists, preserve ownership and update its pipeline stage
-          txOperations.push(
-            prisma.salesLead.update({
-              where: { id: existingLead.id },
-              data: { pipelineStageId: pipelineStage.id }
-            })
-          );
-        }
+      if (!existingLead) {
+        createdNewLead = true;
+        // Lead doesn't exist yet, create it and map it to the stage
+        // If enquiry already has an assigned employee, preserve that ownership!
+        txOperations.push(
+          prisma.salesLead.create({
+            data: {
+              title: `Enquiry: ${existing.referenceNumber}`,
+              source: existing.source || 'Website',
+              status: 'NEW',
+              customerId: existing.customerId,
+              pipelineStageId: stageId,
+              enquiryId: id as string,
+              assignedToId: assignedEmployeeId,
+              assignmentType: assignedEmployeeId ? 'MANUAL' : undefined,
+              assignedAt: assignedEmployeeId ? new Date() : undefined,
+            }
+          })
+        );
+      } else {
+        // Lead exists, preserve ownership and update its pipeline stage
+        txOperations.push(
+          prisma.salesLead.update({
+            where: { id: existingLead.id },
+            data: { pipelineStageId: stageId }
+          })
+        );
       }
     }
 
@@ -637,18 +630,24 @@ export async function updateEnquiryStatus(req: Request, res: Response): Promise<
     if (createdNewLead && !assignedEmployeeId) {
       const newlyCreatedLead = await prisma.salesLead.findUnique({ where: { enquiryId: id as string } });
       if (newlyCreatedLead) {
-        const assignResult = await assignLeadAutomatically(newlyCreatedLead.id).catch((err) => {
+        const conversionAssignResult = await assignLeadAutomatically(newlyCreatedLead.id).catch((err) => {
           console.error('Lead auto-assignment on status conversion warning:', err);
           return null;
         });
 
-        if (assignResult?.assignedTo?.id) {
-          await prisma.enquiryAssignment.create({
-            data: {
-              enquiryId: id as string,
-              employeeId: assignResult.assignedTo.id,
-            }
-          }).catch(() => {});
+        if (conversionAssignResult && conversionAssignResult.assignedTo && conversionAssignResult.assignedTo.id) {
+          const newAssigneeId = conversionAssignResult.assignedTo.id;
+          const existingAssignment = await prisma.enquiryAssignment.findFirst({
+            where: { enquiryId: id as string, employeeId: newAssigneeId }
+          });
+          if (!existingAssignment) {
+            await prisma.enquiryAssignment.create({
+              data: {
+                enquiryId: id as string,
+                employeeId: newAssigneeId,
+              }
+            }).catch(() => {});
+          }
         }
       }
     }

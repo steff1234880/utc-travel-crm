@@ -38,6 +38,7 @@ import {
   HotelReservation,
   CoordinatorEmployee
 } from '../../../services/operationsService';
+import { formatBookingDate } from '../../../utils/timeUtils';
 
 export default function TourDetails() {
   const { id } = useParams<{ id: string }>();
@@ -846,8 +847,8 @@ export default function TourDetails() {
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-600 bg-white p-3 rounded-lg border border-slate-200">
-                    <div><strong>Check-in:</strong> {new Date(h.checkInDate).toLocaleDateString('en-GB')}</div>
-                    <div><strong>Check-out:</strong> {new Date(h.checkOutDate).toLocaleDateString('en-GB')}</div>
+                    <div><strong>Check-in:</strong> {formatBookingDate(h.checkInDate)}</div>
+                    <div><strong>Check-out:</strong> {formatBookingDate(h.checkOutDate)}</div>
                     <div><strong>Room Type:</strong> {h.roomType || 'Standard'}</div>
                     <div><strong>Rooms / Guests:</strong> {h.numberOfRooms} Rooms, {h.numberOfGuests} Guests</div>
                     <div><strong>Meal Plan:</strong> {h.mealPlan || 'CP'}</div>

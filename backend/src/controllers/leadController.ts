@@ -9,6 +9,7 @@ import {
   getLeadAssignmentHistory,
   setAutoAssignmentSetting
 } from '../services/leadAssignmentService';
+import { resolveDefaultPipelineStageId } from '../services/pipelineStageService';
 
 const createLeadSchema = z.object({
   title: z.string().min(2),
@@ -223,14 +224,10 @@ export const createLead = async (req: Request, res: Response) => {
     const data = createLeadSchema.parse(req.body);
     const { destination, pipelineStage, ...leadData } = data;
     
-    let actualPipelineStageId = leadData.pipelineStageId;
-    
-    if (pipelineStage && !actualPipelineStageId) {
-      const stage = await prisma.salesPipelineStage.findUnique({ where: { name: pipelineStage } });
-      if (stage) {
-        actualPipelineStageId = stage.id;
-      }
-    }
+    // Safely resolve pipelineStageId with fallback to configured default "New" stage
+    const actualPipelineStageId = await resolveDefaultPipelineStageId(
+      leadData.pipelineStageId || pipelineStage || null
+    );
 
     if (leadData.assignedToId) {
       const targetEmployee = await prisma.employee.findUnique({
@@ -467,6 +464,7 @@ const updateLeadSchema = z.object({
   title: z.string().min(2).optional(),
   source: z.string().min(1).optional(),
   pipelineStage: z.string().optional(),
+  pipelineStageId: z.string().uuid().optional(),
   firstName: z.string().optional(),
   lastName: z.string().optional(),
   email: z.string().email().optional().or(z.literal('')),
@@ -495,9 +493,10 @@ export const updateLead = async (req: Request, res: Response) => {
     }
 
     let actualPipelineStageId = existingLead.pipelineStageId;
-    if (data.pipelineStage) {
-      const stage = await prisma.salesPipelineStage.findUnique({ where: { name: data.pipelineStage } });
-      if (stage) actualPipelineStageId = stage.id;
+    if (data.pipelineStage || data.pipelineStageId) {
+      actualPipelineStageId = await resolveDefaultPipelineStageId(data.pipelineStageId || data.pipelineStage || null);
+    } else if (!actualPipelineStageId) {
+      actualPipelineStageId = await resolveDefaultPipelineStageId(null);
     }
 
     const updatedLead = await prisma.$transaction(async (tx) => {
@@ -595,17 +594,61 @@ export const deleteLead = async (req: Request, res: Response) => {
     }
     
     const existingLead = await prisma.salesLead.findUnique({
-      where: { id }
+      where: { id },
+      include: {
+        customer: true
+      }
     });
 
     if (!existingLead) {
       return res.status(404).json({ success: false, error: 'Lead not found' });
     }
 
+    // Capture deleting actor's identity
+    const deletingUserId = req.user?.userId;
+    const deletingUserEmail = req.user?.email || 'Unknown';
+    let actorName = deletingUserEmail;
+
+    if (deletingUserId) {
+      const actorUser = await prisma.user.findUnique({
+        where: { id: deletingUserId },
+        include: { employee: true }
+      });
+      if (actorUser?.employee) {
+        actorName = `${actorUser.employee.firstName} ${actorUser.employee.lastName}`.trim();
+      }
+    }
+
+    const leadTitle = existingLead.title || 'Untitled Lead';
+    const customerName = existingLead.customer 
+      ? `${existingLead.customer.firstName} ${existingLead.customer.lastName || ''}`.trim()
+      : 'Unknown';
+
     try {
       await prisma.salesLead.delete({
         where: { id }
       });
+
+      // Permanent AuditLog record for the deletion
+      await prisma.auditLog.create({
+        data: {
+          userId: deletingUserId || null,
+          userEmail: deletingUserEmail,
+          action: 'LEAD_DELETED',
+          module: 'Sales CRM',
+          recordId: id,
+          previousValue: JSON.stringify({
+            id: existingLead.id,
+            title: existingLead.title,
+            source: existingLead.source,
+            status: existingLead.status,
+            customerId: existingLead.customerId,
+            customerName
+          }),
+          details: `${actorName} deleted lead ${leadTitle}`
+        }
+      }).catch((err) => console.error('Failed to create audit log for lead deletion:', err));
+
       return res.json({ success: true, message: 'Lead deleted successfully' });
     } catch (error: any) {
       // Check if the deletion was blocked by a foreign key constraint (e.g. Quotation requires salesLeadId)
@@ -618,6 +661,28 @@ export const deleteLead = async (req: Request, res: Response) => {
             status: 'ARCHIVED'
           }
         });
+
+        // Permanent AuditLog record for the archived deletion
+        await prisma.auditLog.create({
+          data: {
+            userId: deletingUserId || null,
+            userEmail: deletingUserEmail,
+            action: 'LEAD_DELETED',
+            module: 'Sales CRM',
+            recordId: id,
+            previousValue: JSON.stringify({
+              id: existingLead.id,
+              title: existingLead.title,
+              source: existingLead.source,
+              status: existingLead.status,
+              customerId: existingLead.customerId,
+              customerName,
+              archivedInstead: true
+            }),
+            details: `${actorName} deleted lead ${leadTitle}`
+          }
+        }).catch((err) => console.error('Failed to create audit log for lead archiving/deletion:', err));
+
         return res.json({ success: true, message: 'Lead archived successfully' });
       }
       throw error;

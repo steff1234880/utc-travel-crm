@@ -19,6 +19,7 @@ import {
   Clock
 } from 'lucide-react';
 import { operationsService, HotelReservation, Tour } from '../../../services/operationsService';
+import { formatBookingDate } from '../../../utils/timeUtils';
 
 export default function HotelManagement() {
   const [reservations, setReservations] = useState<HotelReservation[]>([]);
@@ -396,8 +397,8 @@ export default function HotelManagement() {
                       )}
                     </td>
                     <td className="py-3.5 px-4 text-xs">
-                      <div>In: <strong className="text-slate-800">{new Date(h.checkInDate).toLocaleDateString('en-GB')}</strong></div>
-                      <div>Out: <strong className="text-slate-800">{new Date(h.checkOutDate).toLocaleDateString('en-GB')}</strong></div>
+                      <div>In: <strong className="text-slate-800">{formatBookingDate(h.checkInDate)}</strong></div>
+                      <div>Out: <strong className="text-slate-800">{formatBookingDate(h.checkOutDate)}</strong></div>
                     </td>
                     <td className="py-3.5 px-4 text-xs">
                       <div>{h.numberOfRooms} Room(s)</div>

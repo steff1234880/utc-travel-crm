@@ -3,6 +3,7 @@ import prisma from '../utils/prisma';
 import { contactEnquirySchema } from '../validators/contactValidator';
 import { z } from 'zod';
 import { assignLeadAutomatically } from '../services/leadAssignmentService';
+import { resolveDefaultPipelineStageId } from '../services/pipelineStageService';
 
 export const submitEnquiry = async (req: Request, res: Response) => {
   try {
@@ -38,14 +39,14 @@ export const submitEnquiry = async (req: Request, res: Response) => {
           });
         }
 
-        const stage = await prisma.salesPipelineStage.findFirst({ where: { name: 'New' } });
+        const stageId = await resolveDefaultPipelineStageId();
         const lead = await prisma.salesLead.create({
           data: {
             title: `Contact Us: ${data.subject} ${marker}`,
             source: 'Contact Form',
             status: 'NEW',
             customerId: customer.id,
-            pipelineStageId: stage?.id || null
+            pipelineStageId: stageId
           }
         });
 

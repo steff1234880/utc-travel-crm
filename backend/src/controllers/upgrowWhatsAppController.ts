@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
 import { assignLeadAutomatically } from '../services/leadAssignmentService';
+import { resolveDefaultPipelineStageId } from '../services/pipelineStageService';
 import { sendUpgrowWhatsAppMessage, getUpgrowApiKey } from '../services/upgrowWhatsAppService';
 import { checkAndRecordProcessedEvent } from '../services/metaService';
 
@@ -185,21 +186,28 @@ export async function handleUpgrowWebhookController(req: Request, res: Response)
 
       // Self-healing: If the active enquiry has an unassigned or missing SalesLead, ensure it gets linked & assigned
       if (!activeEnquiry.salesLead) {
-        const pipelineStage = await prisma.salesPipelineStage.findFirst({ where: { name: 'New' } });
+        const pipelineStageId = await resolveDefaultPipelineStageId();
         const createdLead = await prisma.salesLead.create({
           data: {
             title: `WhatsApp (Upgrow): ${activeEnquiry.destination || 'General'} (${activeEnquiry.referenceNumber})`,
             source: activeEnquiry.source || 'WhatsApp (Upgrow)',
             status: 'NEW',
             customerId: customer.id,
-            pipelineStageId: pipelineStage?.id || null,
+            pipelineStageId,
             enquiryId: activeEnquiry.id,
           }
         });
         await assignLeadAutomatically(createdLead.id).catch(err => {
           console.error('[Upgrow WhatsApp] Auto-assignment error on active lead:', err);
         });
-      } else if (!activeEnquiry.salesLead.assignedToId || activeEnquiry.assignments.length === 0) {
+      } else if (!activeEnquiry.salesLead.assignedToId || activeEnquiry.assignments.length === 0 || !activeEnquiry.salesLead.pipelineStageId) {
+        if (!activeEnquiry.salesLead.pipelineStageId) {
+          const defaultStageId = await resolveDefaultPipelineStageId();
+          await prisma.salesLead.update({
+            where: { id: activeEnquiry.salesLead.id },
+            data: { pipelineStageId: defaultStageId }
+          }).catch(() => {});
+        }
         await assignLeadAutomatically(activeEnquiry.salesLead.id).catch(err => {
           console.error('[Upgrow WhatsApp] Auto-assignment error on unassigned lead:', err);
         });
@@ -223,21 +231,28 @@ export async function handleUpgrowWebhookController(req: Request, res: Response)
 
         // Self-healing: If the recent enquiry has an unassigned or missing SalesLead, ensure it gets assigned
         if (!recentEnquiry.salesLead) {
-          const pipelineStage = await prisma.salesPipelineStage.findFirst({ where: { name: 'New' } });
+          const pipelineStageId = await resolveDefaultPipelineStageId();
           const createdLead = await prisma.salesLead.create({
             data: {
               title: `WhatsApp (Upgrow): ${recentEnquiry.destination || 'General'} (${recentEnquiry.referenceNumber})`,
               source: recentEnquiry.source || 'WhatsApp (Upgrow)',
               status: 'NEW',
               customerId: customer.id,
-              pipelineStageId: pipelineStage?.id || null,
+              pipelineStageId,
               enquiryId: recentEnquiry.id,
             }
           });
           await assignLeadAutomatically(createdLead.id).catch(err => {
             console.error('[Upgrow WhatsApp] Auto-assignment error on recent lead:', err);
           });
-        } else if (!recentEnquiry.salesLead.assignedToId || recentEnquiry.assignments.length === 0) {
+        } else if (!recentEnquiry.salesLead.assignedToId || recentEnquiry.assignments.length === 0 || !recentEnquiry.salesLead.pipelineStageId) {
+          if (!recentEnquiry.salesLead.pipelineStageId) {
+            const defaultStageId = await resolveDefaultPipelineStageId();
+            await prisma.salesLead.update({
+              where: { id: recentEnquiry.salesLead.id },
+              data: { pipelineStageId: defaultStageId }
+            }).catch(() => {});
+          }
           await assignLeadAutomatically(recentEnquiry.salesLead.id).catch(err => {
             console.error('[Upgrow WhatsApp] Auto-assignment error on unassigned recent lead:', err);
           });
@@ -274,9 +289,7 @@ export async function handleUpgrowWebhookController(req: Request, res: Response)
         enquiryId = newEnquiry.id;
 
         // Auto-create matching SalesLead in "New" pipeline stage
-        const pipelineStage = await prisma.salesPipelineStage.findFirst({
-          where: { name: 'New' }
-        });
+        const pipelineStageId = await resolveDefaultPipelineStageId();
 
         const salesLead = await prisma.salesLead.create({
           data: {
@@ -284,7 +297,7 @@ export async function handleUpgrowWebhookController(req: Request, res: Response)
             source: sourceName,
             status: 'NEW',
             customerId: customer.id,
-            pipelineStageId: pipelineStage?.id || null,
+            pipelineStageId,
             enquiryId: newEnquiry.id,
           }
         });

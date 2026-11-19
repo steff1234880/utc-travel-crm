@@ -83,13 +83,61 @@ export async function getOrCreateEmployeeForUser(userId: string) {
   return employee;
 }
 
-// Helper to get normalized date for today
+// Helper to get time in minutes for today in IST
+export function getISTMinutes(dateVal: Date = new Date()): number {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Kolkata',
+      hour: 'numeric',
+      minute: 'numeric',
+      hourCycle: 'h23'
+    }).formatToParts(dateVal);
+    const h = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
+    const m = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
+    return h * 60 + m;
+  } catch {
+    return dateVal.getHours() * 60 + dateVal.getMinutes();
+  }
+}
+
+// Helper to format time in IST (Asia/Kolkata) with fallback
+export function formatAttendanceTimeIST(dateVal?: Date | string | null): string | null {
+  if (!dateVal) return null;
+  try {
+    const d = typeof dateVal === 'string' ? new Date(dateVal) : dateVal;
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleTimeString('en-US', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  } catch {
+    return null;
+  }
+}
+
+// Helper to get normalized date for today in IST
 export function getTodayDate(): Date {
   const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return new Date(`${year}-${month}-${day}T00:00:00.000Z`);
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    const parts = formatter.formatToParts(now);
+    const year = parts.find(p => p.type === 'year')?.value || now.getFullYear();
+    const month = parts.find(p => p.type === 'month')?.value || String(now.getMonth() + 1).padStart(2, '0');
+    const day = parts.find(p => p.type === 'day')?.value || String(now.getDate()).padStart(2, '0');
+    return new Date(`${year}-${month}-${day}T00:00:00.000Z`);
+  } catch {
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return new Date(`${year}-${month}-${day}T00:00:00.000Z`);
+  }
 }
 
 // ----------------------------------------------------
@@ -211,7 +259,7 @@ export const employeeCheckIn = async (req: Request, res: Response) => {
     if (existing && existing.checkInTime) {
       return res.status(400).json({
         success: false,
-        message: `Already checked in today at ${new Date(existing.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+        message: `Already checked in today at ${formatAttendanceTimeIST(existing.checkInTime)}`
       });
     }
 
@@ -221,7 +269,7 @@ export const employeeCheckIn = async (req: Request, res: Response) => {
     const officeStartMins = startH * 60 + startM;
     const allowedStartMins = officeStartMins + (timings.gracePeriodMins || 0);
 
-    const checkInMins = now.getHours() * 60 + now.getMinutes();
+    const checkInMins = getISTMinutes(now);
     const isLate = checkInMins > allowedStartMins;
     const lateMins = isLate ? checkInMins - officeStartMins : 0;
     const initialStatus = isLate ? 'LATE' : 'PRESENT';
@@ -262,7 +310,7 @@ export const employeeCheckIn = async (req: Request, res: Response) => {
 
     return res.status(200).json({
       success: true,
-      message: `Checked in successfully at ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+      message: `Checked in successfully at ${formatAttendanceTimeIST(now)}`,
       data: attendance
     });
   } catch (error) {
@@ -323,7 +371,7 @@ export const employeeCheckOut = async (req: Request, res: Response) => {
     if (existing.checkOutTime) {
       return res.status(400).json({
         success: false,
-        message: `Already checked out today at ${new Date(existing.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+        message: `Already checked out today at ${formatAttendanceTimeIST(existing.checkOutTime)}`
       });
     }
 
@@ -337,7 +385,7 @@ export const employeeCheckOut = async (req: Request, res: Response) => {
     // Check early departure
     const [endH, endM] = timings.officeEndTime.split(':').map(Number);
     const officeEndMins = endH * 60 + endM;
-    const checkOutMins = now.getHours() * 60 + now.getMinutes();
+    const checkOutMins = getISTMinutes(now);
     const isEarlyDeparture = checkOutMins < officeEndMins;
     const earlyMins = isEarlyDeparture ? officeEndMins - checkOutMins : 0;
 
@@ -388,7 +436,7 @@ export const employeeCheckOut = async (req: Request, res: Response) => {
 
     return res.status(200).json({
       success: true,
-      message: `Checked out successfully at ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} (${roundedHours} hours worked)`,
+      message: `Checked out successfully at ${formatAttendanceTimeIST(now)} (${roundedHours} hours worked)`,
       data: attendance
     });
   } catch (error) {
@@ -459,8 +507,8 @@ export const getMyAttendanceHistory = async (req: Request, res: Response) => {
           id: r.id,
           date: new Date(r.date).toISOString().split('T')[0],
           status: r.status,
-          checkInTime: r.checkInTime ? new Date(r.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null,
-          checkOutTime: r.checkOutTime ? new Date(r.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null,
+          checkInTime: formatAttendanceTimeIST(r.checkInTime),
+          checkOutTime: formatAttendanceTimeIST(r.checkOutTime),
           workingHours: r.workingHours !== null && r.workingHours !== undefined
             ? r.workingHours
             : (r.status === 'PRESENT' ? 8.5 : r.status === 'LATE' ? 8.0 : r.status === 'HALF_DAY' ? 4.0 : 0),
@@ -569,8 +617,8 @@ export const getAllEmployeesAttendance = async (req: Request, res: Response) => 
           designation: r.employee.designation?.name || 'Staff',
           date: new Date(r.date).toISOString().split('T')[0],
           status: r.status,
-          checkInTime: r.checkInTime ? new Date(r.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null,
-          checkOutTime: r.checkOutTime ? new Date(r.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null,
+          checkInTime: formatAttendanceTimeIST(r.checkInTime),
+          checkOutTime: formatAttendanceTimeIST(r.checkOutTime),
           workingHours: r.workingHours,
           notes: r.notes
         }))

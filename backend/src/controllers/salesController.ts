@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import prisma from '../utils/prisma';
 import { getLeadAccessContext } from './leadController';
+import { repairOrphanedSalesLeads, resolveDefaultPipelineStageId } from '../services/pipelineStageService';
 
 export const getSalesDashboardMetrics = async (req: Request, res: Response) => {
   try {
@@ -75,11 +76,23 @@ export const getSalesDashboardMetrics = async (req: Request, res: Response) => {
     const activeEmails = activeUsers.map(u => u.email).filter(Boolean);
 
     const auditLogs = await prisma.auditLog.findMany({
-      take: 10,
+      take: 20,
       where: {
         module: { in: ['CRM', 'ACCOUNTING', 'Sales CRM'] },
         action: { notIn: ['LOGIN', 'LOGOUT', 'FAILED_LOGIN', 'UPDATE_SYSTEM_SETTINGS'] },
         userEmail: { in: activeEmails }
+      },
+      include: {
+        user: {
+          select: {
+            employee: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            }
+          }
+        }
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -91,20 +104,36 @@ export const getSalesDashboardMetrics = async (req: Request, res: Response) => {
         type: sa.action,
         description: sa.description || `Action on lead: ${sa.salesLead?.title}`,
         actor: sa.employee ? `${sa.employee.firstName} ${sa.employee.lastName}` : 'System',
-        target: sa.salesLead?.customer ? `${sa.salesLead.customer.firstName} ${sa.salesLead.customer.lastName}` : 'Unknown',
+        target: sa.salesLead?.customer ? `${sa.salesLead.customer.firstName} ${sa.salesLead.customer.lastName}` : (sa.salesLead?.title || 'Unknown'),
         timestamp: sa.createdAt,
         source: 'SalesActivity'
       })),
-      ...auditLogs.map((al: any) => ({
-        id: al.id,
-        type: al.action,
-        description: al.details || `Audit action: ${al.action}`,
-        actor: al.userEmail || 'System',
-        target: al.module,
-        timestamp: al.createdAt,
-        source: 'AuditLog'
-      }))
-    ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 10);
+      ...auditLogs.map((al: any) => {
+        let target = al.module;
+        if (al.action === 'LEAD_DELETED' && al.previousValue) {
+          try {
+            const parsed = typeof al.previousValue === 'string' ? JSON.parse(al.previousValue) : al.previousValue;
+            target = parsed.title || parsed.customerName || (parsed.id ? `Lead #${parsed.id.slice(0, 8)}` : al.module);
+          } catch {
+            target = al.recordId ? `Lead #${al.recordId.slice(0, 8)}` : al.module;
+          }
+        }
+
+        const employeeName = al.user?.employee 
+          ? `${al.user.employee.firstName} ${al.user.employee.lastName}`.trim()
+          : null;
+
+        return {
+          id: al.id,
+          type: al.action,
+          description: al.details || `Audit action: ${al.action}`,
+          actor: employeeName || al.userEmail || 'System',
+          target,
+          timestamp: al.createdAt,
+          source: 'AuditLog'
+        };
+      })
+    ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 15);
 
     res.json({
       success: true,
@@ -128,6 +157,12 @@ export const getSalesDashboardMetrics = async (req: Request, res: Response) => {
 export const getSalesPipeline = async (req: Request, res: Response) => {
   try {
     const access = await getLeadAccessContext(req);
+
+    // Auto-repair any orphaned leads (missing or invalid stage) so they never silently vanish
+    await repairOrphanedSalesLeads().catch(err => {
+      console.error('[Sales Pipeline] Auto-repair warning:', err);
+    });
+
     let leadFilter: Prisma.SalesLeadWhereInput = {
       status: { notIn: ['ARCHIVED', 'DELETED'] },
       OR: [

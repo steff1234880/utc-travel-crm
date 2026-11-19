@@ -11,6 +11,7 @@ import {
   Loader2
 } from 'lucide-react';
 import api from '../../services/api';
+import { formatAttendanceTime } from '../../utils/timeUtils';
 
 interface QuickAttendanceWidgetProps {
   variant?: 'banner' | 'card' | 'compact';
@@ -72,13 +73,7 @@ export default function QuickAttendanceWidget({
   const isCheckedOut = Boolean(record?.checkOutTime);
 
   const formatTime = (isoString?: string) => {
-    if (!isoString) return '--:--';
-    try {
-      const date = new Date(isoString);
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } catch {
-      return '--:--';
-    }
+    return formatAttendanceTime(isoString);
   };
 
   if (isLoading) {

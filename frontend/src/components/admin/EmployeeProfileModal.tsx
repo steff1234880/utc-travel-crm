@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../services/api';
+import { formatAttendanceTime } from '../../utils/timeUtils';
 import { 
   X, Calendar, Clock, CheckCircle2, XCircle, AlertCircle, 
   TrendingUp, Award, Target, Briefcase, Building2, Mail, 
@@ -538,8 +539,8 @@ export const EmployeeProfileModal: React.FC<EmployeeProfileModalProps> = ({ empl
                                   {rec.status}
                                 </span>
                               </td>
-                              <td className="px-4 py-3 font-mono text-slate-600">{rec.checkInTime || '-'}</td>
-                              <td className="px-4 py-3 font-mono text-slate-600">{rec.checkOutTime || '-'}</td>
+                              <td className="px-4 py-3 font-mono text-slate-600">{formatAttendanceTime(rec.checkInTime)}</td>
+                              <td className="px-4 py-3 font-mono text-slate-600">{formatAttendanceTime(rec.checkOutTime)}</td>
                               <td className="px-4 py-3 font-mono text-slate-600">{rec.workingHours !== null && rec.workingHours !== undefined ? `${rec.workingHours}h` : '-'}</td>
                             </tr>
                           );

@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContext';
 import { EmployeeProfileModal } from '../../../components/admin/EmployeeProfileModal';
+import { formatAttendanceTime, formatBookingDate } from '../../../utils/timeUtils';
 
 export default function AttendanceManagement() {
   const queryClient = useQueryClient();
@@ -232,7 +233,7 @@ export default function AttendanceManagement() {
                 todayRecord.checkOutTime ? (
                   <span>Checked Out • {todayRecord.workingHours || 0} Hours Logged</span>
                 ) : (
-                  <span>Working • Checked In at {new Date(todayRecord.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  <span>Working • Checked In at {formatAttendanceTime(todayRecord.checkInTime)}</span>
                 )
               ) : (
                 <span>Not Checked In Yet</span>
@@ -470,9 +471,11 @@ export default function AttendanceManagement() {
                             {r.status}
                           </span>
                         </td>
-                        <td className="px-4 py-3 font-mono text-slate-700">{r.checkInTime || '-'}</td>
+                        <td className="px-4 py-3 font-mono text-slate-700">{formatAttendanceTime(r.checkInTime)}</td>
                         <td className="px-4 py-3 font-mono text-slate-700">
-                          {r.checkOutTime || (
+                          {r.checkOutTime ? (
+                            formatAttendanceTime(r.checkOutTime)
+                          ) : (
                             <span className="text-amber-600 font-semibold italic text-[11px]">Missing</span>
                           )}
                         </td>
@@ -515,8 +518,8 @@ export default function AttendanceManagement() {
                             {r.status}
                           </span>
                         </td>
-                        <td className="px-4 py-3 font-mono">{r.checkInTime || '-'}</td>
-                        <td className="px-4 py-3 font-mono">{r.checkOutTime || '-'}</td>
+                        <td className="px-4 py-3 font-mono">{formatAttendanceTime(r.checkInTime)}</td>
+                        <td className="px-4 py-3 font-mono">{formatAttendanceTime(r.checkOutTime)}</td>
                         <td className="px-4 py-3 font-mono">{r.workingHours !== null && r.workingHours !== undefined ? `${r.workingHours}h` : '-'}</td>
                         <td className="px-4 py-3 text-slate-500">{r.notes || '-'}</td>
                       </tr>

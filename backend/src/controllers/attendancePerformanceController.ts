@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
+import { formatAttendanceTimeIST } from './attendanceManagementController';
 
 // Helper to determine role category
 function getRoleCategory(roleName?: string, designationName?: string, departmentName?: string): 'SALES' | 'OPERATIONS' | 'GENERAL' {
@@ -305,8 +306,8 @@ export const getEmployeeAttendanceAndPerformance = async (req: Request, res: Res
         date: d.toISOString().split('T')[0],
         dayOfWeek: days[d.getDay()],
         status: att.status,
-        checkInTime: att.checkInTime ? new Date(att.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null,
-        checkOutTime: att.checkOutTime ? new Date(att.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null,
+        checkInTime: formatAttendanceTimeIST(att.checkInTime),
+        checkOutTime: formatAttendanceTimeIST(att.checkOutTime),
         workingHours: att.workingHours !== null && att.workingHours !== undefined
           ? att.workingHours
           : (att.status === 'PRESENT' ? 8.5 : att.status === 'LATE' ? 8.0 : att.status === 'HALF_DAY' ? 4.0 : 0),
