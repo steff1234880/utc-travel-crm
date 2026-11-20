@@ -106,7 +106,7 @@ export async function verifyLeadOwnership(
     };
   }
 
-  if (context.isSuperOrAdmin) {
+  if (context.isSuperOrAdmin || context.isSalesManager) {
     return {
       allowed: true,
       statusCode: 200,
@@ -143,9 +143,17 @@ export const getLeads = async (req: Request, res: Response) => {
     if (pipelineStageId) where.pipelineStageId = String(pipelineStageId);
     if (assignedToId) where.assignedToId = String(assignedToId);
 
-    // Sales Executives and Sales Managers can only open and view their own assigned leads
+    // Scope handling for lead listing:
+    // Sales Managers view personal leads by default, but can view team leads with scope=all.
+    // Sales Executives are strictly restricted to their own assigned leads.
     const access = await getLeadAccessContext(req);
-    if (access.isOwnLeadsOnlyRole) {
+    const requestedScope = String(req.query.scope || '').trim().toLowerCase();
+
+    if (access.isSalesManager) {
+      if (requestedScope !== 'all' && !assignedToId) {
+        where.assignedToId = access.employeeId || '__NO_ASSIGNED_LEADS__';
+      }
+    } else if (access.isOwnLeadsOnlyRole) {
       where.assignedToId = access.employeeId || '__NO_ASSIGNED_LEADS__';
     }
 

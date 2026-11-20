@@ -11,6 +11,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { NotificationsDropdown } from '../components/admin/NotificationsDropdown';
 import QuickAttendanceWidget from '../components/admin/QuickAttendanceWidget';
+import EmployeeWelcomeModal from '../components/admin/EmployeeWelcomeModal';
 
 interface NavSubItem {
   name: string;
@@ -518,6 +519,9 @@ export default function AdminLayout() {
           </main>
         </div>
       )}
+
+      {/* Personalized Employee Welcome Modal (triggers once per login session) */}
+      <EmployeeWelcomeModal />
     </div>
   );
 }

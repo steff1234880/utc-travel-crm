@@ -12,6 +12,8 @@ export interface UserProfile {
     employeeId: string;
     firstName: string;
     lastName: string;
+    department?: { id: string; name: string } | null;
+    designation?: { id: string; name: string } | null;
   } | null;
 }
 
@@ -109,6 +111,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         localStorage.setItem('token', data.accessToken);
         if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
         
+        // Flag this browser session as freshly logged in for the Welcome Popup
+        sessionStorage.setItem('utc_just_logged_in', 'true');
+        sessionStorage.removeItem('utc_welcome_popup_shown');
+
         setToken(data.accessToken);
         setUser(data.user);
         localStorage.setItem('user_profile', JSON.stringify(data.user));
@@ -131,6 +137,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     localStorage.removeItem('token');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('user_profile');
+    sessionStorage.removeItem('utc_welcome_popup_shown');
+    sessionStorage.removeItem('utc_just_logged_in');
+    sessionStorage.removeItem('utc_login_session_active');
     setToken(null);
     setUser(null);
   };

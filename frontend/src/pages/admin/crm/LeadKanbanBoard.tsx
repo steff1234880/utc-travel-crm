@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../../services/api';
-import { Plus, Edit2, Trash2, Users, UserCheck, ArrowRightLeft } from 'lucide-react';
+import { Plus, Edit2, Trash2, Users, UserCheck, ArrowRightLeft, User, Globe } from 'lucide-react';
 import NewLeadModal from '../../../components/admin/crm/NewLeadModal';
 import EditLeadModal from '../../../components/admin/crm/EditLeadModal';
 import LeadAssignmentOverviewModal from '../../../components/admin/crm/LeadAssignmentOverviewModal';
@@ -19,25 +19,38 @@ const LeadKanbanBoard = () => {
   const [isOverviewOpen, setIsOverviewOpen] = useState(false);
   const [assigningLead, setAssigningLead] = useState<any>(null);
 
+  // Sales Manager detection and view scope ('personal' | 'all')
+  const isSalesManager =
+    hasRole(['Sales Manager', 'SALES_MANAGER']) ||
+    user?.roleName?.toUpperCase() === 'SALES_MANAGER' ||
+    user?.roleName?.toLowerCase().trim() === 'sales manager';
+
+  const [viewScope, setViewScope] = useState<'personal' | 'all'>('personal');
+
   const canManageSettings = hasRole(['CEO / Super Admin', 'Admin', 'ADMIN', 'SUPER_ADMIN']);
   const canAssignLeads = hasRole(['Sales Manager', 'CEO / Super Admin', 'Admin', 'ADMIN', 'SUPER_ADMIN']) ||
     hasPermission('sales_crm:manage') ||
     hasPermission('sales_crm:assign');
 
   const canManageLeadCard = (lead: any) => {
-    if (canManageSettings) return true;
+    if (canManageSettings || isSalesManager) return true;
     const currentEmployeeId = user?.employee?.id;
     if (!currentEmployeeId || !lead?.assignedToId) return false;
     return lead.assignedToId === currentEmployeeId;
   };
 
   useEffect(() => {
-    fetchPipeline();
-  }, []);
+    fetchPipeline(viewScope);
+  }, [viewScope]);
 
-  const fetchPipeline = async () => {
+  const fetchPipeline = async (scope: 'personal' | 'all' = viewScope) => {
     try {
-      const { data } = await api.get('/crm/sales/pipeline');
+      setLoading(true);
+      const params: any = {};
+      if (isSalesManager) {
+        params.scope = scope;
+      }
+      const { data } = await api.get('/crm/sales/pipeline', { params });
       setStages(data.data);
     } catch (error) {
       console.error('Failed to fetch pipeline', error);
@@ -88,6 +101,38 @@ const LeadKanbanBoard = () => {
           <p className="text-xs text-gray-500 mt-0.5">Manage pipeline stages and automatic executive assignments</p>
         </div>
         <div className="flex items-center gap-3">
+          {/* Sales Manager Personal / All Leads Toggle */}
+          {isSalesManager && (
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setViewScope('personal')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  viewScope === 'personal'
+                    ? 'bg-white text-blue-700 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="View only leads assigned to you"
+              >
+                <User className="w-3.5 h-3.5" />
+                <span>Personal</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewScope('all')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  viewScope === 'all'
+                    ? 'bg-white text-blue-700 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="View all team leads across the sales organization"
+              >
+                <Globe className="w-3.5 h-3.5" />
+                <span>All Leads</span>
+              </button>
+            </div>
+          )}
+
           {canAssignLeads && (
             <button
               onClick={() => setIsOverviewOpen(true)}

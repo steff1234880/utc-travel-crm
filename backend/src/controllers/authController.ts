@@ -27,7 +27,12 @@ export const login = async (req: Request, res: Response) => {
             permissions: true
           }
         },
-        employee: true
+        employee: {
+          include: {
+            department: true,
+            designation: true
+          }
+        }
       }
     });
 
@@ -97,7 +102,9 @@ export const login = async (req: Request, res: Response) => {
           id: user.employee.id,
           employeeId: user.employee.employeeId,
           firstName: user.employee.firstName,
-          lastName: user.employee.lastName
+          lastName: user.employee.lastName,
+          department: user.employee.department ? { id: user.employee.department.id, name: user.employee.department.name } : null,
+          designation: user.employee.designation ? { id: user.employee.designation.id, name: user.employee.designation.name } : null
         } : null
       }
     });

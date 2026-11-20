@@ -157,6 +157,7 @@ export const getSalesDashboardMetrics = async (req: Request, res: Response) => {
 export const getSalesPipeline = async (req: Request, res: Response) => {
   try {
     const access = await getLeadAccessContext(req);
+    const requestedScope = String(req.query.scope || '').trim().toLowerCase();
 
     // Auto-repair any orphaned leads (missing or invalid stage) so they never silently vanish
     await repairOrphanedSalesLeads().catch(err => {
@@ -170,7 +171,17 @@ export const getSalesPipeline = async (req: Request, res: Response) => {
         { assignedTo: { status: 'ACTIVE' } }
       ]
     };
-    if (access.isOwnLeadsOnlyRole) {
+
+    if (access.isSalesManager) {
+      // Sales Manager: defaults to personal assigned leads unless 'scope=all' is explicitly requested
+      if (requestedScope !== 'all') {
+        leadFilter = {
+          status: { notIn: ['ARCHIVED', 'DELETED'] },
+          assignedToId: access.employeeId || '__NO_ASSIGNED_LEADS__'
+        };
+      }
+    } else if (access.isOwnLeadsOnlyRole) {
+      // Sales Executives and other restricted roles: strictly restricted to own leads (cannot bypass via query param)
       leadFilter = {
         status: { notIn: ['ARCHIVED', 'DELETED'] },
         assignedToId: access.employeeId || '__NO_ASSIGNED_LEADS__'

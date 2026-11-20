@@ -41,9 +41,14 @@ export default function Login() {
 
         console.log('[Login] Authenticated. Role:', result.user?.roleName, '| Target:', targetRoute);
 
-        // Hard redirect: forces full page reload so AuthContext re-initialises
-        // with the freshly stored token — eliminates any stale HMR/session state
-        window.location.href = targetRoute;
+        // Flag session as newly authenticated so the welcome popup is triggered
+        sessionStorage.setItem('utc_just_logged_in', 'true');
+        sessionStorage.removeItem('utc_welcome_popup_shown');
+
+        // Allow sessionStorage write to complete cleanly before hard redirect
+        setTimeout(() => {
+          window.location.href = targetRoute;
+        }, 50);
         return; // stop further execution
       }
 
