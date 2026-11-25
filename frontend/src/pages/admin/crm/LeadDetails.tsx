@@ -192,7 +192,18 @@ const LeadDetails = () => {
               </span>
             </div>
             <h1 className="text-2xl font-bold text-gray-900 mb-1">{lead.title}</h1>
-            <p className="text-gray-500 text-sm mb-6">Source: {lead.source}</p>
+            <div className="flex flex-wrap items-center gap-2 mb-6">
+              <span className="text-gray-500 text-sm">Source:</span>
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                lead.source?.includes('WhatsApp')
+                  ? lead.source?.includes('Organic')
+                    ? 'bg-slate-100 text-slate-700 border border-slate-200'
+                    : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                  : 'bg-blue-50 text-blue-700 border border-blue-200'
+              }`}>
+                {lead.source}
+              </span>
+            </div>
 
             <div className="space-y-4">
               <div className="flex items-center gap-3 text-gray-700">

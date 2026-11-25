@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
 import { assignLeadAutomatically } from '../services/leadAssignmentService';
 import { resolveDefaultPipelineStageId } from '../services/pipelineStageService';
+import { generateUniqueEnquiryReference } from '../services/enquiryReferenceService';
+import { extractWhatsAppAttribution, formatAttributionNotes } from '../services/whatsappAttributionService';
 import {
   getMetaConfig,
   updateMetaConfig,
@@ -870,22 +872,8 @@ async function processMetaLead(leadData: {
       return recentEnquiry;
     }
 
-    // 3. Generate Reference Number (SIM- prefix for simulated sandbox leads, ENQ- for live)
-    const isSimulated = leadData.leadgenId?.startsWith('sim_');
-    const prefix = isSimulated ? 'SIM-' : 'ENQ-';
-    function generateLeadRef() {
-      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-      let res = prefix;
-      for (let i = 0; i < 6; i++) {
-        res += chars.charAt(Math.floor(Math.random() * chars.length));
-      }
-      return res;
-    }
-
-    let referenceNumber = generateLeadRef();
-    while (await prisma.enquiry.findUnique({ where: { referenceNumber } })) {
-      referenceNumber = generateLeadRef();
-    }
+    // 3. Generate Reference Number (format: UTC-YYYY/MM/DD-XXX)
+    const referenceNumber = await generateUniqueEnquiryReference();
 
     // 4. Create Enquiry
     const enquiry = await prisma.enquiry.create({
@@ -1034,21 +1022,22 @@ async function recordMetaMessage(data: {
         enquiryId = activeEnquiry.id;
       } else if (data.direction === 'INBOUND' && (data.platform === 'WHATSAPP' || data.platform === 'INSTAGRAM')) {
         const isInstagram = data.platform === 'INSTAGRAM';
-        const sourceName = isInstagram ? 'Instagram DM' : 'WhatsApp Enquiry';
+        
+        // Extract Meta Click-to-WhatsApp referral metadata (Campaign ID/Name, Ad ID/Name, Source URL)
+        let sourceName = isInstagram ? 'Instagram DM' : 'WhatsApp Enquiry';
+        let campaignAttributionNote = '';
+        let resolvedDestination = isInstagram ? 'Instagram Inquiry' : 'General Enquiry';
 
-        function generateUniqueRef() {
-          const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-          let res = 'ENQ-';
-          for (let i = 0; i < 6; i++) {
-            res += chars.charAt(Math.floor(Math.random() * chars.length));
+        if (!isInstagram) {
+          const attribution = await extractWhatsAppAttribution(data.rawPayload, data.rawPayload);
+          sourceName = attribution.sourceTag;
+          campaignAttributionNote = formatAttributionNotes(attribution);
+          if (attribution.campaignName && attribution.campaignName !== 'Meta Ad') {
+            resolvedDestination = attribution.campaignName;
           }
-          return res;
         }
 
-        let referenceNumber = generateUniqueRef();
-        while (await prisma.enquiry.findUnique({ where: { referenceNumber } })) {
-          referenceNumber = generateUniqueRef();
-        }
+        const referenceNumber = await generateUniqueEnquiryReference();
 
         const newEnquiry = await prisma.enquiry.create({
           data: {
@@ -1056,7 +1045,7 @@ async function recordMetaMessage(data: {
             source: sourceName,
             status: 'NEW',
             customerId: customer.id,
-            destination: isInstagram ? 'Instagram Inquiry' : 'General Enquiry',
+            destination: resolvedDestination,
             message: data.content || (isInstagram ? 'Incoming message via Instagram Direct' : 'Incoming message via WhatsApp'),
             preferredContact: isInstagram ? 'OTHER' : 'WHATSAPP',
           }
@@ -1068,14 +1057,34 @@ async function recordMetaMessage(data: {
 
         const salesLead = await prisma.salesLead.create({
           data: {
-            title: `${sourceName} (${newEnquiry.referenceNumber})`,
+            title: `${sourceName}: ${resolvedDestination} (${newEnquiry.referenceNumber})`,
             source: sourceName,
             status: 'NEW',
             customerId: customer.id,
             pipelineStageId,
             enquiryId: newEnquiry.id,
+            requirements: campaignAttributionNote ? {
+              create: {
+                destination: resolvedDestination,
+                notes: campaignAttributionNote,
+              }
+            } : undefined,
           }
         });
+
+        // Add Activity Log for attribution tracking in timeline
+        if (campaignAttributionNote) {
+          await prisma.auditLog.create({
+            data: {
+              userId: null,
+              userEmail: 'Meta Webhook Gateway',
+              action: 'WHATSAPP_CAMPAIGN_ATTRIBUTION',
+              module: 'Enquiries',
+              recordId: newEnquiry.id,
+              details: `Originating Campaign: ${sourceName}. ${campaignAttributionNote.replace(/\n/g, ' | ')}`,
+            }
+          }).catch(() => {});
+        }
 
         const assignResult = await assignLeadAutomatically(salesLead.id).catch((err) => {
           console.error(`Error auto-assigning ${sourceName} lead:`, err);

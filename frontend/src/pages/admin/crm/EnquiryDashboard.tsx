@@ -286,7 +286,17 @@ export default function EnquiryDashboard() {
                     <tr key={enq.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4">
                         <span className="text-sm font-bold text-slate-900">{enq.referenceNumber}</span>
-                        <span className="block text-xs text-slate-500">{enq.source.replace(/_/g, ' ')}</span>
+                        <div className="mt-1">
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                            enq.source.includes('WhatsApp')
+                              ? enq.source.includes('Organic')
+                                ? 'bg-slate-100 text-slate-700'
+                                : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-slate-50 text-slate-600'
+                          }`}>
+                            {enq.source.replace(/_/g, ' ')}
+                          </span>
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <span className="text-sm font-medium text-slate-900 block">{enq.customer.firstName} {enq.customer.lastName ?? ''}</span>

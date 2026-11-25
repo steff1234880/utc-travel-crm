@@ -441,7 +441,18 @@ export default function EnquiryDetail() {
             <div className="p-6 border-b border-slate-100 bg-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
                 <h1 className="text-2xl font-black text-slate-900 tracking-tight">{enquiry.referenceNumber}</h1>
-                <p className="text-slate-500 font-medium text-sm mt-0.5">Source: {enquiry.source.replace(/_/g, ' ')}</p>
+                <div className="flex flex-wrap items-center gap-2 mt-1">
+                  <span className="text-slate-500 font-medium text-sm">Source:</span>
+                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                    enquiry.source.includes('WhatsApp')
+                      ? enquiry.source.includes('Organic')
+                        ? 'bg-slate-100 text-slate-700 border border-slate-200'
+                        : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      : 'bg-blue-50 text-blue-700 border border-blue-200'
+                  }`}>
+                    {enquiry.source.replace(/_/g, ' ')}
+                  </span>
+                </div>
               </div>
               
               <div className="flex items-center gap-2">

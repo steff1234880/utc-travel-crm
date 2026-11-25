@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 
 const sanitizeStr = (str?: string | null) => (str ? str.trim() : undefined);
 
-// Helper function to auto-generate Reference GT-YYYY-XXXX
+import { generateUniqueEnquiryReference } from '../services/enquiryReferenceService';
 const generateGroupTourRef = async (): Promise<string> => {
   const year = new Date().getFullYear();
   const prefix = `GT-${year}-`;
@@ -305,8 +305,7 @@ export const joinGroupTour = async (req: Request, res: Response): Promise<void> 
       }
 
       // 4. Create Enquiry in CRM
-      const refCount = await tx.enquiry.count();
-      const enquiryRef = `ENQ-${new Date().getFullYear()}-${(refCount + 1).toString().padStart(4, '0')}`;
+      const enquiryRef = await generateUniqueEnquiryReference();
       
       const enquiry = await tx.enquiry.create({
         data: {

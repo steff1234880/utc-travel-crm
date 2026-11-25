@@ -98,6 +98,21 @@ export const getTimeline = async (req: Request, res: Response): Promise<void> =>
           ...((tour as any).customerId ? [(tour as any).customerId] : [])
         ];
       }
+    } else if (entityType.toUpperCase() === 'ENQUIRY') {
+      const enquiry = await prisma.enquiry.findUnique({
+        where: { id: entityId },
+        include: {
+          salesLead: true,
+          customer: true
+        }
+      });
+      if (enquiry) {
+        relatedIds = [
+          entityId,
+          ...((enquiry as any).salesLead?.id ? [(enquiry as any).salesLead.id] : []),
+          ...((enquiry as any).customerId ? [(enquiry as any).customerId] : [])
+        ];
+      }
     }
 
     // 1. Fetch Audit Logs
@@ -113,6 +128,7 @@ export const getTimeline = async (req: Request, res: Response): Promise<void> =>
       if (log.action === 'LEAD_WON') title = 'Lead Won';
       else if (log.action === 'QUOTATION_ACCEPTED') title = 'Quotation Accepted';
       else if (log.action === 'CONVERT_TO_BOOKING') title = 'Booking Created';
+      else if (log.action === 'WHATSAPP_CAMPAIGN_ATTRIBUTION') title = 'Meta WhatsApp Campaign Attribution';
 
       timelineEvents.push({
         id: log.id,

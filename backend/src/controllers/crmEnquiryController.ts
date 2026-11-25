@@ -3,6 +3,7 @@ import prisma from '../utils/prisma';
 import { z } from 'zod';
 import { assignLeadAutomatically, assignLeadManually } from '../services/leadAssignmentService';
 import { resolveDefaultPipelineStageId } from '../services/pipelineStageService';
+import { generateEnquiryReference, generateUniqueEnquiryReference } from '../services/enquiryReferenceService';
 
 // ─── Zod Schemas ─────────────────────────────────────────────────────────────
 
@@ -96,9 +97,7 @@ const statusToStageMap: Record<string, string> = {
 // ─── Helper: Generate Reference Number ───────────────────────────────────────
 
 function generateEnquiryRef(): string {
-  const year = new Date().getFullYear();
-  const random = Math.floor(1000 + Math.random() * 9000);
-  return `ENQ-${year}-${random}`;
+  return generateEnquiryReference();
 }
 
 // ─── PUBLIC: Submit Enquiry ───────────────────────────────────────────────────
@@ -223,10 +222,7 @@ export async function submitEnquiry(req: Request, res: Response): Promise<void> 
     ].filter(Boolean).join('\n');
 
     // 6. Generate Reference Number
-    let referenceNumber = generateEnquiryRef();
-    while (await prisma.enquiry.findUnique({ where: { referenceNumber } })) {
-      referenceNumber = generateEnquiryRef();
-    }
+    const referenceNumber = await generateUniqueEnquiryReference();
 
     const sourceTag = data.source || 'Website Package Booking';
 

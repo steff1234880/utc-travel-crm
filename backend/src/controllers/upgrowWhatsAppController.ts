@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
 import { assignLeadAutomatically } from '../services/leadAssignmentService';
 import { resolveDefaultPipelineStageId } from '../services/pipelineStageService';
+import { generateUniqueEnquiryReference } from '../services/enquiryReferenceService';
+import { extractWhatsAppAttribution, formatAttributionNotes } from '../services/whatsappAttributionService';
 import { sendUpgrowWhatsAppMessage, getUpgrowApiKey } from '../services/upgrowWhatsAppService';
 import { checkAndRecordProcessedEvent } from '../services/metaService';
 
@@ -258,21 +260,21 @@ export async function handleUpgrowWebhookController(req: Request, res: Response)
           });
         }
       } else {
-        // Generate Unique Reference Number
-        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-        let referenceNumber = 'ENQ-';
-        for (let i = 0; i < 6; i++) {
-          referenceNumber += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        while (await prisma.enquiry.findUnique({ where: { referenceNumber } })) {
-          referenceNumber = 'ENQ-';
-          for (let i = 0; i < 6; i++) {
-            referenceNumber += chars.charAt(Math.floor(Math.random() * chars.length));
-          }
-        }
+        // Generate Unique Reference Number (format: UTC-YYYY/MM/DD-XXX)
+        const referenceNumber = await generateUniqueEnquiryReference();
 
-        const destination = leadData.destination || body.destination || 'General Enquiry';
-        const sourceName = 'WhatsApp (Upgrow)';
+        // Extract Click-to-WhatsApp Referral & Meta Campaign Attribution
+        const attribution = await extractWhatsAppAttribution(body.message || body, body);
+        const sourceName = attribution.sourceTag;
+        const campaignAttributionNote = formatAttributionNotes(attribution);
+
+        let destination = leadData.destination || body.destination || '';
+        if (!destination && attribution.campaignName && attribution.campaignName !== 'Meta Ad') {
+          destination = attribution.campaignName;
+        }
+        if (!destination) {
+          destination = 'General Enquiry';
+        }
 
         const newEnquiry = await prisma.enquiry.create({
           data: {
@@ -281,7 +283,7 @@ export async function handleUpgrowWebhookController(req: Request, res: Response)
             status: 'NEW',
             customerId: customer.id,
             destination,
-            message: rawContent || 'Incoming enquiry via Upgrow Sales Flow WhatsApp',
+            message: rawContent || 'Incoming enquiry via WhatsApp',
             preferredContact: 'WHATSAPP',
           }
         });
@@ -299,8 +301,28 @@ export async function handleUpgrowWebhookController(req: Request, res: Response)
             customerId: customer.id,
             pipelineStageId,
             enquiryId: newEnquiry.id,
+            requirements: campaignAttributionNote ? {
+              create: {
+                destination,
+                notes: campaignAttributionNote,
+              }
+            } : undefined,
           }
         });
+
+        // Add Activity Log for attribution tracking in timeline
+        if (campaignAttributionNote) {
+          await prisma.auditLog.create({
+            data: {
+              userId: null,
+              userEmail: 'WhatsApp Webhook Gateway',
+              action: 'WHATSAPP_CAMPAIGN_ATTRIBUTION',
+              module: 'Enquiries',
+              recordId: newEnquiry.id,
+              details: `Originating Campaign: ${sourceName}. ${campaignAttributionNote.replace(/\n/g, ' | ')}`,
+            }
+          }).catch(() => {});
+        }
 
         // ─── 6. Strict Sequential Round-Robin Lead Assignment ────────────────────
         // Automatically selects next active Sales Executive and synchronizes EnquiryAssignment
