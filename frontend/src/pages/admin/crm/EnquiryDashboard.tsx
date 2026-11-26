@@ -58,6 +58,8 @@ type EmployeeOption = {
   email: string;
   roleName?: string;
   designationName?: string;
+  status?: string;
+  isActive?: boolean;
 };
 
 export default function EnquiryDashboard() {
@@ -356,7 +358,7 @@ export default function EnquiryDashboard() {
                 <UserCheck className={`w-4 h-4 shrink-0 ${assignedToFilter ? 'text-blue-600' : 'text-slate-400'}`} />
                 <span className="truncate">
                   {selectedEmployee
-                    ? `${selectedEmployee.firstName} ${selectedEmployee.lastName}`
+                    ? `${selectedEmployee.firstName} ${selectedEmployee.lastName}${selectedEmployee.isActive === false || selectedEmployee.status !== 'ACTIVE' ? ' (Inactive)' : ''}`
                     : 'Assigned To: All'}
                 </span>
               </div>
@@ -414,6 +416,7 @@ export default function EnquiryDashboard() {
                   ) : (
                     filteredStaff.map((emp) => {
                       const isSelected = assignedToFilter === emp.id;
+                      const isInactive = emp.isActive === false || emp.status !== 'ACTIVE';
                       return (
                         <button
                           key={emp.id}
@@ -428,7 +431,14 @@ export default function EnquiryDashboard() {
                           }`}
                         >
                           <div className="truncate pr-2">
-                            <div className="font-medium text-slate-900">{emp.firstName} {emp.lastName}</div>
+                            <div className="font-medium text-slate-900 flex items-center gap-1.5">
+                              <span>{emp.firstName} {emp.lastName}</span>
+                              {isInactive && (
+                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+                                  (Inactive)
+                                </span>
+                              )}
+                            </div>
                             <div className="text-[10px] text-slate-400 truncate">{emp.roleName || emp.designationName || 'Sales Executive'}</div>
                           </div>
                           {isSelected && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />}

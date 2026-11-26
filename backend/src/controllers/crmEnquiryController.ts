@@ -1092,22 +1092,68 @@ export async function deleteEnquiry(req: Request, res: Response): Promise<void> 
   }
 }
 
-// ─── CRM: Get Active Staff / Sales Executives for Enquiry Filtering ────────────
+// ─── CRM: Get Active & Inactive Staff / Sales Executives for Enquiry Filtering ────────────
 
 export async function getEnquiryStaff(req: Request, res: Response): Promise<void> {
   try {
-    const executives = await getEligibleSalesExecutives();
+    const employees = await prisma.employee.findMany({
+      include: {
+        user: {
+          include: {
+            role: true
+          }
+        },
+        department: true,
+        designation: true
+      },
+      orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }]
+    });
+
+    const staffList: any[] = [];
+
+    for (const emp of employees) {
+      const roleName = emp.user?.role?.name || '';
+      const desigName = emp.designation?.name || '';
+      const deptName = emp.department?.name || '';
+
+      const lowerRole = roleName.toLowerCase().trim();
+      const lowerDesig = desigName.toLowerCase().trim();
+
+      // Check if role or designation is Sales Executive or Sales Manager
+      const isSalesExecRole = lowerRole.includes('sales executive') || lowerRole === 'sales_executive';
+      const isSalesExecDesig = lowerDesig.includes('sales executive');
+      const isSalesManagerRole = lowerRole.includes('sales manager') || lowerRole === 'sales_manager';
+      const isSalesManagerDesig = lowerDesig.includes('sales manager');
+
+      // Exclude admins, CEOs, directors, and coordinators outright from sales staff list
+      const isExcluded = ['admin', 'ceo', 'director', 'coordinator']
+        .some(k => lowerRole.includes(k) || lowerDesig.includes(k));
+
+      if ((isSalesExecRole || isSalesExecDesig || isSalesManagerRole || isSalesManagerDesig) && !isExcluded) {
+        const resolvedRoleName = (isSalesManagerRole || isSalesManagerDesig)
+          ? (roleName || desigName || 'Sales Manager')
+          : (roleName || desigName || 'Sales Executive');
+
+        const isUserActive = emp.user?.isActive ?? true;
+        const isActive = emp.status === 'ACTIVE' && isUserActive;
+
+        staffList.push({
+          id: emp.id,
+          firstName: emp.firstName,
+          lastName: emp.lastName,
+          email: emp.user?.email || '',
+          roleName: resolvedRoleName,
+          designationName: desigName,
+          departmentName: deptName,
+          status: emp.status,
+          isActive
+        });
+      }
+    }
+
     res.json({
       success: true,
-      data: executives.map(e => ({
-        id: e.id,
-        firstName: e.firstName,
-        lastName: e.lastName,
-        email: e.email,
-        roleName: e.roleName,
-        designationName: e.designationName,
-        departmentName: e.departmentName
-      }))
+      data: staffList
     });
   } catch (error: any) {
     console.error('Failed to get enquiry staff:', error);
