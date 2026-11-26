@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Search, Filter, RefreshCcw, Calendar, Phone, Trash2, AlertCircle, CheckCircle2, X, UserCheck, Inbox } from 'lucide-react';
+import { Search, Filter, RefreshCcw, Calendar, Phone, Trash2, AlertCircle, CheckCircle2, X, UserCheck, Inbox, ChevronDown, Check } from 'lucide-react';
 import api from '../../../services/api';
 import { useAuth } from '../../../context/AuthContext';
 import EnquiryAssignmentModal from '../../../components/admin/crm/EnquiryAssignmentModal';
@@ -51,6 +51,15 @@ type Enquiry = {
   } | null;
 };
 
+type EmployeeOption = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  roleName?: string;
+  designationName?: string;
+};
+
 export default function EnquiryDashboard() {
   const queryClient = useQueryClient();
   const { hasRole, hasPermission } = useAuth();
@@ -58,6 +67,51 @@ export default function EnquiryDashboard() {
   const [statusFilter, setStatusFilter] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'unassigned'>('all');
   const [page, setPage] = useState(1);
+
+  // New Filters: Assigned To & Date Range
+  const [assignedToFilter, setAssignedToFilter] = useState<string>(''); // employeeId or ''
+  const [employeeSearchTerm, setEmployeeSearchTerm] = useState('');
+  const [isEmployeeDropdownOpen, setIsEmployeeDropdownOpen] = useState(false);
+  const employeeDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate] = useState<string>('');
+
+  // Close employee dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (employeeDropdownRef.current && !employeeDropdownRef.current.contains(event.target as Node)) {
+        setIsEmployeeDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Fetch active sales employees / staff
+  const { data: staffList = [] } = useQuery<EmployeeOption[]>({
+    queryKey: ['enquiry-staff-list'],
+    queryFn: async () => {
+      try {
+        const res = await api.get('/enquiries/staff');
+        if (res.data?.success && Array.isArray(res.data.data)) {
+          return res.data.data;
+        }
+      } catch (err) {
+        console.warn('Falling back to /crm/leads/assignment/overview for staff list:', err);
+      }
+      try {
+        const fallbackRes = await api.get('/crm/leads/assignment/overview');
+        if (fallbackRes.data?.success && Array.isArray(fallbackRes.data.data?.executives)) {
+          return fallbackRes.data.data.executives;
+        }
+      } catch (e) {
+        console.warn('Fallback to /crm/leads/assignment/overview failed:', e);
+      }
+      return [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
 
   // Assign modal state
   const [assigningEnquiry, setAssigningEnquiry] = useState<Enquiry | null>(null);
@@ -82,12 +136,15 @@ export default function EnquiryDashboard() {
   });
 
   const { data: enquiryData, isLoading, isError, refetch } = useQuery<{ data: Enquiry[]; pagination: { total: number; pages: number } }>({
-    queryKey: ['enquiries', page, searchTerm, statusFilter, activeTab],
+    queryKey: ['enquiries', page, searchTerm, statusFilter, activeTab, assignedToFilter, fromDate, toDate],
     queryFn: async () => {
       const params = new URLSearchParams({ page: String(page), limit: '20' });
       if (searchTerm) params.set('search', searchTerm);
       if (statusFilter) params.set('status', statusFilter);
       if (activeTab === 'unassigned') params.set('unassigned', 'true');
+      if (assignedToFilter) params.set('assignedTo', assignedToFilter);
+      if (fromDate) params.set('fromDate', fromDate);
+      if (toDate) params.set('toDate', toDate);
       const res = await api.get(`/enquiries?${params}`);
       return res.data;
     },
@@ -95,6 +152,36 @@ export default function EnquiryDashboard() {
 
   const enquiries = enquiryData?.data ?? [];
   const pagination = enquiryData?.pagination;
+
+  // Selected employee object
+  const selectedEmployee = staffList.find(e => e.id === assignedToFilter);
+
+  // Filtered employees for dropdown
+  const filteredStaff = staffList.filter(e => {
+    const fullName = `${e.firstName} ${e.lastName}`.toLowerCase();
+    const query = employeeSearchTerm.toLowerCase();
+    return fullName.includes(query) || (e.roleName && e.roleName.toLowerCase().includes(query));
+  });
+
+  // Quick preset helper for Today in Asia/Kolkata
+  const handleSelectToday = () => {
+    const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+    setFromDate(todayStr);
+    setToDate(todayStr);
+    setPage(1);
+  };
+
+  const handleClearDateRange = () => {
+    setFromDate('');
+    setToDate('');
+    setPage(1);
+  };
+
+  const handleClearEmployee = () => {
+    setAssignedToFilter('');
+    setEmployeeSearchTerm('');
+    setPage(1);
+  };
 
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
@@ -226,17 +313,20 @@ export default function EnquiryDashboard() {
 
       {/* Filters */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="p-4 border-b border-slate-100 flex flex-wrap gap-3 bg-slate-50">
-          <div className="relative w-72">
+        <div className="p-4 border-b border-slate-100 flex flex-wrap items-center gap-3 bg-slate-50">
+          {/* Keyword Search */}
+          <div className="relative w-full sm:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
               placeholder="Search name, ref, phone, email…"
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
-              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white"
             />
           </div>
+
+          {/* Status Filter */}
           <select
             value={statusFilter}
             onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
@@ -250,6 +340,179 @@ export default function EnquiryDashboard() {
             <option value="CONVERTED">Converted</option>
             <option value="LOST">Lost</option>
           </select>
+
+          {/* 1. ASSIGNED TO FILTER (Searchable Dropdown) */}
+          <div className="relative" ref={employeeDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setIsEmployeeDropdownOpen(!isEmployeeDropdownOpen)}
+              className={`flex items-center justify-between gap-2 border rounded-lg px-3 py-2 text-sm bg-white transition-colors min-w-[200px] text-left ${
+                assignedToFilter
+                  ? 'border-blue-500 text-blue-900 font-semibold ring-1 ring-blue-500 bg-blue-50/40'
+                  : 'border-slate-200 text-slate-700 hover:border-slate-300'
+              }`}
+            >
+              <div className="flex items-center gap-2 truncate">
+                <UserCheck className={`w-4 h-4 shrink-0 ${assignedToFilter ? 'text-blue-600' : 'text-slate-400'}`} />
+                <span className="truncate">
+                  {selectedEmployee
+                    ? `${selectedEmployee.firstName} ${selectedEmployee.lastName}`
+                    : 'Assigned To: All'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1">
+                {assignedToFilter && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleClearEmployee();
+                    }}
+                    className="p-0.5 hover:bg-blue-100 rounded text-slate-400 hover:text-slate-700"
+                    title="Clear assigned employee"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </span>
+                )}
+                <ChevronDown className="w-4 h-4 text-slate-400" />
+              </div>
+            </button>
+
+            {isEmployeeDropdownOpen && (
+              <div className="absolute left-0 top-full mt-1.5 w-72 bg-white rounded-xl shadow-xl border border-slate-200 z-50 p-2 text-sm">
+                <div className="relative mb-2">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search employee..."
+                    value={employeeSearchTerm}
+                    onChange={(e) => setEmployeeSearchTerm(e.target.value)}
+                    autoFocus
+                    className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div className="max-h-56 overflow-y-auto divide-y divide-slate-50">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAssignedToFilter('');
+                      setIsEmployeeDropdownOpen(false);
+                      setPage(1);
+                    }}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-between hover:bg-slate-50 ${
+                      !assignedToFilter ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-700'
+                    }`}
+                  >
+                    <span>All Employees</span>
+                    {!assignedToFilter && <Check className="w-3.5 h-3.5 text-blue-600" />}
+                  </button>
+
+                  {filteredStaff.length === 0 ? (
+                    <div className="py-3 text-center text-xs text-slate-400">No employees found</div>
+                  ) : (
+                    filteredStaff.map((emp) => {
+                      const isSelected = assignedToFilter === emp.id;
+                      return (
+                        <button
+                          key={emp.id}
+                          type="button"
+                          onClick={() => {
+                            setAssignedToFilter(emp.id);
+                            setIsEmployeeDropdownOpen(false);
+                            setPage(1);
+                          }}
+                          className={`w-full text-left px-3 py-2 rounded-lg text-xs flex items-center justify-between hover:bg-slate-50 ${
+                            isSelected ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-700'
+                          }`}
+                        >
+                          <div className="truncate pr-2">
+                            <div className="font-medium text-slate-900">{emp.firstName} {emp.lastName}</div>
+                            <div className="text-[10px] text-slate-400 truncate">{emp.roleName || emp.designationName || 'Sales Executive'}</div>
+                          </div>
+                          {isSelected && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 2. DATE RANGE FILTER (From Date, To Date & Presets) */}
+          <div className="flex flex-wrap items-center gap-2 border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white">
+            <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
+            <div className="flex items-center gap-1.5 text-xs text-slate-600">
+              <span className="font-semibold text-slate-500">From:</span>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => {
+                  setFromDate(e.target.value);
+                  setPage(1);
+                }}
+                className="border border-slate-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-700"
+              />
+            </div>
+            <span className="text-slate-400 text-xs">to</span>
+            <div className="flex items-center gap-1.5 text-xs text-slate-600">
+              <span className="font-semibold text-slate-500">To:</span>
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => {
+                  setToDate(e.target.value);
+                  setPage(1);
+                }}
+                className="border border-slate-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-700"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSelectToday}
+              className="px-2 py-1 text-xs font-semibold rounded bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-600 transition-colors border border-slate-200"
+              title="Select today"
+            >
+              Today
+            </button>
+
+            {(fromDate || toDate) && (
+              <button
+                type="button"
+                onClick={handleClearDateRange}
+                className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600 transition-colors"
+                title="Clear date filter"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Total Matching Results Badge */}
+          <div className="ml-auto flex items-center gap-2">
+            {(assignedToFilter || fromDate || toDate || statusFilter || searchTerm) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchTerm('');
+                  setStatusFilter('');
+                  setAssignedToFilter('');
+                  setFromDate('');
+                  setToDate('');
+                  setPage(1);
+                }}
+                className="text-xs font-medium text-slate-500 hover:text-rose-600 underline underline-offset-2"
+              >
+                Reset All Filters
+              </button>
+            )}
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
+              {pagination ? `${pagination.total} matching` : 'Loading…'}
+            </span>
+          </div>
         </div>
 
         {/* Table */}

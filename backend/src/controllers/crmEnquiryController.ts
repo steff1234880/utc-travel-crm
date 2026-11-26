@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
 import { z } from 'zod';
-import { assignLeadAutomatically, assignLeadManually } from '../services/leadAssignmentService';
+import { assignLeadAutomatically, assignLeadManually, getEligibleSalesExecutives } from '../services/leadAssignmentService';
 import { resolveDefaultPipelineStageId } from '../services/pipelineStageService';
 import { generateEnquiryReference, generateUniqueEnquiryReference } from '../services/enquiryReferenceService';
 
@@ -443,11 +443,14 @@ async function verifyEnquiryOwnership(enquiryId: string, req: Request): Promise<
 
 export async function listEnquiries(req: Request, res: Response): Promise<void> {
   try {
-    const page = parseInt((req.query.page as string) || '1') || 1;
-    const limit = parseInt((req.query.limit as string) || '20') || 20;
-    const status = Array.isArray(req.query.status) ? req.query.status[0] : req.query.status as string | undefined;
-    const source = Array.isArray(req.query.source) ? req.query.source[0] : req.query.source as string | undefined;
-    const search = Array.isArray(req.query.search) ? req.query.search[0] : req.query.search as string | undefined;
+    const page = parseInt(String(req.query.page || '1'), 10) || 1;
+    const limit = parseInt(String(req.query.limit || '20'), 10) || 20;
+    const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+    const source = typeof req.query.source === 'string' ? req.query.source : undefined;
+    const search = typeof req.query.search === 'string' ? req.query.search : undefined;
+    const assignedTo = typeof req.query.assignedTo === 'string' ? req.query.assignedTo : undefined;
+    const fromDate = typeof req.query.fromDate === 'string' ? req.query.fromDate : undefined;
+    const toDate = typeof req.query.toDate === 'string' ? req.query.toDate : undefined;
 
     const access = await getEnquiryAccessContext(req);
 
@@ -486,6 +489,49 @@ export async function listEnquiries(req: Request, res: Response): Promise<void> 
           { salesLead: { assignedToId: null } }
         ]
       });
+    }
+
+    // ─── 1. Assigned To Filter (Manager / Admin filter by specific employee ID) ──
+    if (assignedTo && assignedTo !== 'all') {
+      if (assignedTo === 'unassigned') {
+        andConditions.push({
+          assignments: { none: {} },
+          OR: [
+            { salesLead: { is: null } },
+            { salesLead: { assignedToId: null } }
+          ]
+        });
+      } else {
+        // Exclude unassigned leads and match exact employee ID across assignments or salesLead
+        andConditions.push({
+          OR: [
+            { assignments: { some: { employeeId: assignedTo } } },
+            { salesLead: { assignedToId: assignedTo } }
+          ]
+        });
+      }
+    }
+
+    // ─── 2. Date Range Filter (Using actual enquiry creation date) ─────────────
+    if (fromDate || toDate) {
+      const createdAtFilter: any = {};
+      if (fromDate) {
+        // e.g. "2026-11-26" -> parse into start of day IST (or UTC if ISO)
+        const start = new Date(fromDate.includes('T') ? fromDate : `${fromDate}T00:00:00.000+05:30`);
+        if (!isNaN(start.getTime())) {
+          createdAtFilter.gte = start;
+        }
+      }
+      if (toDate) {
+        // e.g. "2026-11-26" -> parse into end of day inclusive IST
+        const end = new Date(toDate.includes('T') ? toDate : `${toDate}T23:59:59.999+05:30`);
+        if (!isNaN(end.getTime())) {
+          createdAtFilter.lte = end;
+        }
+      }
+      if (createdAtFilter.gte || createdAtFilter.lte) {
+        andConditions.push({ createdAt: createdAtFilter });
+      }
     }
 
     const where = andConditions.length > 0 ? { AND: andConditions } : {};
@@ -1045,4 +1091,31 @@ export async function deleteEnquiry(req: Request, res: Response): Promise<void> 
     });
   }
 }
+
+// ─── CRM: Get Active Staff / Sales Executives for Enquiry Filtering ────────────
+
+export async function getEnquiryStaff(req: Request, res: Response): Promise<void> {
+  try {
+    const executives = await getEligibleSalesExecutives();
+    res.json({
+      success: true,
+      data: executives.map(e => ({
+        id: e.id,
+        firstName: e.firstName,
+        lastName: e.lastName,
+        email: e.email,
+        roleName: e.roleName,
+        designationName: e.designationName,
+        departmentName: e.departmentName
+      }))
+    });
+  } catch (error: any) {
+    console.error('Failed to get enquiry staff:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to fetch staff members.'
+    });
+  }
+}
+
 

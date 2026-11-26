@@ -10,6 +10,7 @@ import {
   getDashboardStats,
   assignEnquiryController,
   deleteEnquiry,
+  getEnquiryStaff,
 } from '../controllers/crmEnquiryController';
 import { authenticate, requireModuleAccess, authorizeRole } from '../middleware/authMiddleware';
 
@@ -21,6 +22,7 @@ router.post('/submit', submitEnquiry);
 
 // ─── CRM Read Routes ─────────────────────────────────────────────────────────
 router.get('/stats', authenticate, requireModuleAccess('Enquiries'), getDashboardStats);
+router.get('/staff', authenticate, requireModuleAccess('Enquiries'), getEnquiryStaff);
 router.get('/', authenticate, requireModuleAccess('Enquiries'), listEnquiries);
 router.get('/:id', authenticate, requireModuleAccess('Enquiries'), getEnquiryById);
 
